@@ -64,7 +64,7 @@ func TestSearch_NoResults(t *testing.T) {
 
 	tc.runOK("contact", "add", "--name", "Jane Doe")
 
-	out := tc.runOK("search", "zzzznonexistent")
+	_ = tc.runOK("search", "zzzznonexistent")
 	// Should succeed (exit 0) with empty results.
 	var results []map[string]interface{}
 	tc.runJSON(&results, "search", "zzzznonexistent", "--format", "json")
