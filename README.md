@@ -41,9 +41,23 @@ No server. No Docker. No accounts. Back it up by copying the file.
 
 ## Configuration
 
-`~/.crm/config.toml` (created on first run):
+Config is loaded from `crm.toml`. Resolution order (first match wins):
 
-```toml
+1. `--config <path>` flag (explicit)
+2. `CRM_CONFIG` env var
+3. Walk up from CWD: `./crm.toml` → `../crm.toml` → `../../crm.toml` → ... → `/crm.toml`
+4. `~/.crm/config.toml` (global fallback)
+
+This means you can drop a `crm.toml` in your project root and it applies to everyone working in that directory — just like `.gitignore` or `biome.jsonc`.
+
+```bash
+# Project-scoped config
+echo '[pipeline]
+stages = ["discovery", "demo", "trial", "closed-won", "closed-lost"]' > ./crm.toml
+
+# Global config (applies everywhere unless overridden)
+mkdir -p ~/.crm
+cat > ~/.crm/config.toml << 'EOF'
 [database]
 path = "~/.crm/crm.db"
 
@@ -55,7 +69,10 @@ format = "table"    # table | json | csv | tsv | ids
 
 [search]
 model = "all-MiniLM-L6-v2"    # local embedding model
+EOF
 ```
+
+Settings in a closer `crm.toml` override the global config. The `--config` flag overrides everything.
 
 ---
 
