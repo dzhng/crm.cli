@@ -5,9 +5,9 @@ import { join } from 'node:path'
 const CRM_BIN = join(import.meta.dir, '..', 'src', 'cli.ts')
 
 export interface RunResult {
-  stdout: string
-  stderr: string
   exitCode: number
+  stderr: string
+  stdout: string
 }
 
 export function createTestContext() {
@@ -15,10 +15,13 @@ export function createTestContext() {
   const dbPath = join(dir, 'test.db')
 
   function run(...args: string[]): RunResult {
-    const proc = Bun.spawnSync(['bun', 'run', CRM_BIN, '--db', dbPath, ...args], {
-      cwd: dir,
-      env: { ...process.env, NO_COLOR: '1' },
-    })
+    const proc = Bun.spawnSync(
+      ['bun', 'run', CRM_BIN, '--db', dbPath, ...args],
+      {
+        cwd: dir,
+        env: { ...process.env, NO_COLOR: '1' },
+      },
+    )
     return {
       stdout: proc.stdout.toString(),
       stderr: proc.stderr.toString(),
@@ -51,7 +54,10 @@ export function createTestContext() {
     return JSON.parse(out) as T
   }
 
-  function runWithEnv(env: Record<string, string>, ...args: string[]): RunResult {
+  function runWithEnv(
+    env: Record<string, string>,
+    ...args: string[]
+  ): RunResult {
     const proc = Bun.spawnSync(['bun', 'run', CRM_BIN, ...args], {
       cwd: dir,
       env: { ...process.env, NO_COLOR: '1', ...env },

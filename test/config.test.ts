@@ -1,6 +1,6 @@
+import { describe, expect, test } from 'bun:test'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { describe, expect, test } from 'bun:test'
 
 import { createTestContext } from './helpers.ts'
 
@@ -14,7 +14,18 @@ describe('config resolution', () => {
     )
 
     // Add a deal with a stage from the explicit config.
-    const id = ctx.runOK('--config', configPath, 'deal', 'add', '--title', 'Test', '--stage', 'alpha').trim()
+    const id = ctx
+      .runOK(
+        '--config',
+        configPath,
+        'deal',
+        'add',
+        '--title',
+        'Test',
+        '--stage',
+        'alpha',
+      )
+      .trim()
     const show = ctx.runOK('--config', configPath, 'deal', 'show', id)
     expect(show).toContain('alpha')
   })
@@ -28,7 +39,16 @@ describe('config resolution', () => {
     )
 
     // "lead" is in the default config but not in this custom config.
-    const result = ctx.runFail('--config', configPath, 'deal', 'add', '--title', 'Test', '--stage', 'lead')
+    const result = ctx.runFail(
+      '--config',
+      configPath,
+      'deal',
+      'add',
+      '--title',
+      'Test',
+      '--stage',
+      'lead',
+    )
     expect(result.stderr).toContain('stage')
   })
 
@@ -42,7 +62,12 @@ describe('config resolution', () => {
 
     const result = ctx.runWithEnv(
       { CRM_CONFIG: configPath, CRM_DB: ctx.dbPath },
-      'deal', 'add', '--title', 'Test', '--stage', 'env-stage-1',
+      'deal',
+      'add',
+      '--title',
+      'Test',
+      '--stage',
+      'env-stage-1',
     )
     expect(result.exitCode).toBe(0)
   })
@@ -55,7 +80,9 @@ describe('config resolution', () => {
     )
 
     // Run from ctx.dir — should pick up ./crm.toml.
-    const id = ctx.runOK('deal', 'add', '--title', 'Test', '--stage', 'local-1').trim()
+    const id = ctx
+      .runOK('deal', 'add', '--title', 'Test', '--stage', 'local-1')
+      .trim()
     const show = ctx.runOK('deal', 'show', id)
     expect(show).toContain('local-1')
   })
@@ -74,7 +101,19 @@ describe('config resolution', () => {
     mkdirSync(subdir)
 
     const proc = Bun.spawnSync(
-      ['bun', 'run', join(import.meta.dir, '..', 'src', 'cli.ts'), '--db', ctx.dbPath, 'deal', 'add', '--title', 'Test', '--stage', 'parent-1'],
+      [
+        'bun',
+        'run',
+        join(import.meta.dir, '..', 'src', 'cli.ts'),
+        '--db',
+        ctx.dbPath,
+        'deal',
+        'add',
+        '--title',
+        'Test',
+        '--stage',
+        'parent-1',
+      ],
       { cwd: subdir, env: { ...process.env, NO_COLOR: '1' } },
     )
     expect(proc.exitCode).toBe(0)
@@ -93,7 +132,19 @@ describe('config resolution', () => {
     mkdirSync(nested, { recursive: true })
 
     const proc = Bun.spawnSync(
-      ['bun', 'run', join(import.meta.dir, '..', 'src', 'cli.ts'), '--db', ctx.dbPath, 'deal', 'add', '--title', 'Test', '--stage', 'grandparent-1'],
+      [
+        'bun',
+        'run',
+        join(import.meta.dir, '..', 'src', 'cli.ts'),
+        '--db',
+        ctx.dbPath,
+        'deal',
+        'add',
+        '--title',
+        'Test',
+        '--stage',
+        'grandparent-1',
+      ],
       { cwd: nested, env: { ...process.env, NO_COLOR: '1' } },
     )
     expect(proc.exitCode).toBe(0)
@@ -118,14 +169,38 @@ describe('config resolution', () => {
 
     // Run from subdir — child config should win.
     const proc = Bun.spawnSync(
-      ['bun', 'run', join(import.meta.dir, '..', 'src', 'cli.ts'), '--db', ctx.dbPath, 'deal', 'add', '--title', 'Test', '--stage', 'child-stage'],
+      [
+        'bun',
+        'run',
+        join(import.meta.dir, '..', 'src', 'cli.ts'),
+        '--db',
+        ctx.dbPath,
+        'deal',
+        'add',
+        '--title',
+        'Test',
+        '--stage',
+        'child-stage',
+      ],
       { cwd: subdir, env: { ...process.env, NO_COLOR: '1' } },
     )
     expect(proc.exitCode).toBe(0)
 
     // Parent stage should NOT be valid from child dir.
     const proc2 = Bun.spawnSync(
-      ['bun', 'run', join(import.meta.dir, '..', 'src', 'cli.ts'), '--db', ctx.dbPath, 'deal', 'add', '--title', 'Test2', '--stage', 'parent-stage'],
+      [
+        'bun',
+        'run',
+        join(import.meta.dir, '..', 'src', 'cli.ts'),
+        '--db',
+        ctx.dbPath,
+        'deal',
+        'add',
+        '--title',
+        'Test2',
+        '--stage',
+        'parent-stage',
+      ],
       { cwd: subdir, env: { ...process.env, NO_COLOR: '1' } },
     )
     expect(proc2.exitCode).not.toBe(0)
@@ -142,17 +217,34 @@ describe('config resolution', () => {
 
     // Explicit config via flag.
     const explicitConfig = join(ctx.dir, 'override.toml')
-    writeFileSync(
-      explicitConfig,
-      `[pipeline]\nstages = ["explicit-stage"]\n`,
-    )
+    writeFileSync(explicitConfig, `[pipeline]\nstages = ["explicit-stage"]\n`)
 
     // --config should win over local crm.toml.
-    const id = ctx.runOK('--config', explicitConfig, 'deal', 'add', '--title', 'Test', '--stage', 'explicit-stage').trim()
+    const id = ctx
+      .runOK(
+        '--config',
+        explicitConfig,
+        'deal',
+        'add',
+        '--title',
+        'Test',
+        '--stage',
+        'explicit-stage',
+      )
+      .trim()
     expect(id).toStartWith('dl_')
 
     // local-stage should NOT work with --config override.
-    const result = ctx.runFail('--config', explicitConfig, 'deal', 'add', '--title', 'Test2', '--stage', 'local-stage')
+    const result = ctx.runFail(
+      '--config',
+      explicitConfig,
+      'deal',
+      'add',
+      '--title',
+      'Test2',
+      '--stage',
+      'local-stage',
+    )
     expect(result.stderr).toContain('stage')
   })
 
@@ -160,16 +252,15 @@ describe('config resolution', () => {
     const ctx = createTestContext()
 
     // No crm.toml anywhere — default stages should work.
-    const id = ctx.runOK('deal', 'add', '--title', 'Test', '--stage', 'lead').trim()
+    const id = ctx
+      .runOK('deal', 'add', '--title', 'Test', '--stage', 'lead')
+      .trim()
     expect(id).toStartWith('dl_')
   })
 
   test('config sets default output format', () => {
     const ctx = createTestContext()
-    writeFileSync(
-      join(ctx.dir, 'crm.toml'),
-      `[defaults]\nformat = "json"\n`,
-    )
+    writeFileSync(join(ctx.dir, 'crm.toml'), `[defaults]\nformat = "json"\n`)
 
     ctx.runOK('contact', 'add', '--name', 'Jane')
 
@@ -180,10 +271,7 @@ describe('config resolution', () => {
 
   test('--format flag overrides config default', () => {
     const ctx = createTestContext()
-    writeFileSync(
-      join(ctx.dir, 'crm.toml'),
-      `[defaults]\nformat = "json"\n`,
-    )
+    writeFileSync(join(ctx.dir, 'crm.toml'), `[defaults]\nformat = "json"\n`)
 
     ctx.runOK('contact', 'add', '--name', 'Jane')
 
@@ -203,7 +291,15 @@ describe('config resolution', () => {
 
     // Run without --db flag — should use config's database path.
     const proc = Bun.spawnSync(
-      ['bun', 'run', join(import.meta.dir, '..', 'src', 'cli.ts'), 'contact', 'add', '--name', 'Jane'],
+      [
+        'bun',
+        'run',
+        join(import.meta.dir, '..', 'src', 'cli.ts'),
+        'contact',
+        'add',
+        '--name',
+        'Jane',
+      ],
       { cwd: ctx.dir, env: { ...process.env, NO_COLOR: '1' } },
     )
     expect(proc.exitCode).toBe(0)

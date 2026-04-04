@@ -9,7 +9,8 @@
     "crm": "bun run src/cli.ts",
     "check-types": "tsc --noEmit",
     "test": "bun test",
-    "lint": "ultracite fix"
+    "lint": "ultracite fix",
+    "prepare": "husky"
   },
   "lint-staged": {
     "*.{js,jsx,ts,tsx,json,jsonc,css,scss,md,mdx}": [
@@ -30,6 +31,8 @@
     "@biomejs/biome": "^2.4.4",
     "@types/bun": "^1.2.10",
     "drizzle-kit": "^0.31.9",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.4.0",
     "typescript": "~5.9.3",
     "ultracite": "^7.2.3"
   }

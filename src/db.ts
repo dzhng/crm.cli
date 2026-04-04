@@ -1,8 +1,10 @@
-import { createClient } from '@libsql/client'
-import { drizzle } from 'drizzle-orm/libsql'
-import { sql } from 'drizzle-orm'
 import { mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
+
+import { createClient } from '@libsql/client'
+import { sql } from 'drizzle-orm'
+import { drizzle } from 'drizzle-orm/libsql'
+
 import * as schema from './drizzle-schema'
 
 export type DB = ReturnType<typeof drizzle<typeof schema>>
@@ -79,8 +81,8 @@ export async function openDB(dbPath: string): Promise<DB> {
   // Initialize schema: execute each statement separately since libSQL
   // doesn't support multi-statement exec natively
   const statements = SCHEMA_SQL.split(';')
-    .map(s => s.trim())
-    .filter(s => s.length > 0)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0)
   for (const stmt of statements) {
     await client.execute(stmt)
   }
@@ -91,12 +93,22 @@ export async function openDB(dbPath: string): Promise<DB> {
   return db
 }
 
-export async function upsertSearchIndex(db: DB, entityType: string, entityId: string, content: string): Promise<void> {
+export async function upsertSearchIndex(
+  db: DB,
+  entityType: string,
+  entityId: string,
+  content: string,
+): Promise<void> {
   await db.run(sql`DELETE FROM search_index WHERE entity_id = ${entityId}`)
-  await db.run(sql`INSERT INTO search_index (entity_type, entity_id, content) VALUES (${entityType}, ${entityId}, ${content})`)
+  await db.run(
+    sql`INSERT INTO search_index (entity_type, entity_id, content) VALUES (${entityType}, ${entityId}, ${content})`,
+  )
 }
 
-export async function removeSearchIndex(db: DB, entityId: string): Promise<void> {
+export async function removeSearchIndex(
+  db: DB,
+  entityId: string,
+): Promise<void> {
   await db.run(sql`DELETE FROM search_index WHERE entity_id = ${entityId}`)
 }
 
@@ -105,25 +117,49 @@ export async function rebuildSearchIndex(db: DB): Promise<void> {
 
   const allContacts = await db.select().from(schema.contacts)
   for (const c of allContacts) {
-    const content = [c.name, c.emails, c.phones, c.linkedin, c.x, c.bluesky, c.telegram, c.tags, c.custom_fields].filter(Boolean).join(' ')
-    await db.run(sql`INSERT INTO search_index (entity_type, entity_id, content) VALUES (${'contact'}, ${c.id}, ${content})`)
+    const content = [
+      c.name,
+      c.emails,
+      c.phones,
+      c.linkedin,
+      c.x,
+      c.bluesky,
+      c.telegram,
+      c.tags,
+      c.custom_fields,
+    ]
+      .filter(Boolean)
+      .join(' ')
+    await db.run(
+      sql`INSERT INTO search_index (entity_type, entity_id, content) VALUES (${'contact'}, ${c.id}, ${content})`,
+    )
   }
 
   const allCompanies = await db.select().from(schema.companies)
   for (const co of allCompanies) {
-    const content = [co.name, co.websites, co.phones, co.tags, co.custom_fields].filter(Boolean).join(' ')
-    await db.run(sql`INSERT INTO search_index (entity_type, entity_id, content) VALUES (${'company'}, ${co.id}, ${content})`)
+    const content = [co.name, co.websites, co.phones, co.tags, co.custom_fields]
+      .filter(Boolean)
+      .join(' ')
+    await db.run(
+      sql`INSERT INTO search_index (entity_type, entity_id, content) VALUES (${'company'}, ${co.id}, ${content})`,
+    )
   }
 
   const allDeals = await db.select().from(schema.deals)
   for (const d of allDeals) {
-    const content = [d.title, d.stage, d.tags, d.custom_fields].filter(Boolean).join(' ')
-    await db.run(sql`INSERT INTO search_index (entity_type, entity_id, content) VALUES (${'deal'}, ${d.id}, ${content})`)
+    const content = [d.title, d.stage, d.tags, d.custom_fields]
+      .filter(Boolean)
+      .join(' ')
+    await db.run(
+      sql`INSERT INTO search_index (entity_type, entity_id, content) VALUES (${'deal'}, ${d.id}, ${content})`,
+    )
   }
 
   const allActivities = await db.select().from(schema.activities)
   for (const a of allActivities) {
     const content = [a.type, a.body, a.custom_fields].filter(Boolean).join(' ')
-    await db.run(sql`INSERT INTO search_index (entity_type, entity_id, content) VALUES (${'activity'}, ${a.id}, ${content})`)
+    await db.run(
+      sql`INSERT INTO search_index (entity_type, entity_id, content) VALUES (${'activity'}, ${a.id}, ${content})`,
+    )
   }
 }

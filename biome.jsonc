@@ -21,11 +21,41 @@
     }
   },
   "extends": ["ultracite/biome/core"],
+  "linter": {
+    "rules": {
+      "suspicious": {
+        "noExplicitAny": "off"
+      },
+      "complexity": {
+        "noExcessiveCognitiveComplexity": "off"
+      },
+      "performance": {
+        "noNamespaceImport": "off",
+        "useTopLevelRegex": "off"
+      }
+    }
+  },
   "javascript": {
+    "globals": ["Bun"],
     "formatter": {
       "quoteStyle": "single",
       "semicolons": "asNeeded",
       "trailingCommas": "all"
     }
-  }
+  },
+  "overrides": [
+    {
+      "includes": ["test/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noNonNullAssertion": "off"
+          },
+          "suspicious": {
+            "noEmptyBlockStatements": "off"
+          }
+        }
+      }
+    }
+  ]
 }

@@ -5,8 +5,22 @@ import { createTestContext } from './helpers.ts'
 describe('search (keyword FTS5)', () => {
   test('search by name', () => {
     const ctx = createTestContext()
-    ctx.runOK('contact', 'add', '--name', 'Jane Doe', '--email', 'jane@acme.com')
-    ctx.runOK('contact', 'add', '--name', 'John Smith', '--email', 'john@globex.com')
+    ctx.runOK(
+      'contact',
+      'add',
+      '--name',
+      'Jane Doe',
+      '--email',
+      'jane@acme.com',
+    )
+    ctx.runOK(
+      'contact',
+      'add',
+      '--name',
+      'John Smith',
+      '--email',
+      'john@globex.com',
+    )
 
     const out = ctx.runOK('search', 'Jane')
     expect(out).toContain('Jane Doe')
@@ -15,7 +29,14 @@ describe('search (keyword FTS5)', () => {
 
   test('search by email host', () => {
     const ctx = createTestContext()
-    ctx.runOK('contact', 'add', '--name', 'Jane Doe', '--email', 'jane@acme.com')
+    ctx.runOK(
+      'contact',
+      'add',
+      '--name',
+      'Jane Doe',
+      '--email',
+      'jane@acme.com',
+    )
 
     const out = ctx.runOK('search', 'acme.com')
     expect(out).toContain('Jane Doe')
@@ -46,7 +67,12 @@ describe('search (keyword FTS5)', () => {
   test('search in activity notes', () => {
     const ctx = createTestContext()
     ctx.runOK('contact', 'add', '--name', 'Jane', '--email', 'jane@acme.com')
-    ctx.runOK('log', 'note', 'jane@acme.com', 'Discussed the enterprise pricing tier')
+    ctx.runOK(
+      'log',
+      'note',
+      'jane@acme.com',
+      'Discussed the enterprise pricing tier',
+    )
 
     const out = ctx.runOK('search', 'enterprise pricing')
     expect(out).toContain('enterprise pricing')
@@ -56,15 +82,32 @@ describe('search (keyword FTS5)', () => {
     const ctx = createTestContext()
     ctx.runOK('contact', 'add', '--name', 'Jane Doe')
 
-    const results = ctx.runJSON<unknown[]>('search', 'zzzznonexistent', '--format', 'json')
+    const results = ctx.runJSON<unknown[]>(
+      'search',
+      'zzzznonexistent',
+      '--format',
+      'json',
+    )
     expect(results).toHaveLength(0)
   })
 
   test('json format includes type field', () => {
     const ctx = createTestContext()
-    ctx.runOK('contact', 'add', '--name', 'Jane Doe', '--email', 'jane@acme.com')
+    ctx.runOK(
+      'contact',
+      'add',
+      '--name',
+      'Jane Doe',
+      '--email',
+      'jane@acme.com',
+    )
 
-    const results = ctx.runJSON<Array<{ type: string }>>('search', 'Jane', '--format', 'json')
+    const results = ctx.runJSON<Array<{ type: string }>>(
+      'search',
+      'Jane',
+      '--format',
+      'json',
+    )
     expect(results).toHaveLength(1)
     expect(results[0].type).toBe('contact')
   })
@@ -73,10 +116,35 @@ describe('search (keyword FTS5)', () => {
 describe('find (semantic search)', () => {
   test('natural language query returns relevant results', () => {
     const ctx = createTestContext()
-    ctx.runOK('contact', 'add', '--name', 'Alice Chen', '--company', 'FinTech London Ltd', '--set', 'title=CTO', '--set', 'location=London')
-    ctx.runOK('contact', 'add', '--name', 'Bob Wilson', '--company', 'Acme US', '--set', 'title=Engineer')
+    ctx.runOK(
+      'contact',
+      'add',
+      '--name',
+      'Alice Chen',
+      '--company',
+      'FinTech London Ltd',
+      '--set',
+      'title=CTO',
+      '--set',
+      'location=London',
+    )
+    ctx.runOK(
+      'contact',
+      'add',
+      '--name',
+      'Bob Wilson',
+      '--company',
+      'Acme US',
+      '--set',
+      'title=Engineer',
+    )
 
-    const results = ctx.runJSON<Array<{ name: string }>>('find', 'fintech CTO from London', '--format', 'json')
+    const results = ctx.runJSON<Array<{ name: string }>>(
+      'find',
+      'fintech CTO from London',
+      '--format',
+      'json',
+    )
     expect(results.length).toBeGreaterThan(0)
     expect(results[0].name).toBe('Alice Chen')
   })
@@ -84,10 +152,22 @@ describe('find (semantic search)', () => {
   test('limit results', () => {
     const ctx = createTestContext()
     for (let i = 0; i < 5; i++) {
-      ctx.runOK('contact', 'add', '--name', `Person ${String.fromCharCode(65 + i)}`)
+      ctx.runOK(
+        'contact',
+        'add',
+        '--name',
+        `Person ${String.fromCharCode(65 + i)}`,
+      )
     }
 
-    const results = ctx.runJSON<unknown[]>('find', 'person', '--limit', '2', '--format', 'json')
+    const results = ctx.runJSON<unknown[]>(
+      'find',
+      'person',
+      '--limit',
+      '2',
+      '--format',
+      'json',
+    )
     expect(results.length).toBeLessThanOrEqual(2)
   })
 
@@ -96,7 +176,14 @@ describe('find (semantic search)', () => {
     ctx.runOK('contact', 'add', '--name', 'Acme Alice')
     ctx.runOK('company', 'add', '--name', 'Acme Corp')
 
-    const results = ctx.runJSON<Array<{ type: string }>>('find', 'acme', '--type', 'contact', '--format', 'json')
+    const results = ctx.runJSON<Array<{ type: string }>>(
+      'find',
+      'acme',
+      '--type',
+      'contact',
+      '--format',
+      'json',
+    )
     for (const r of results) {
       expect(r.type).toBe('contact')
     }

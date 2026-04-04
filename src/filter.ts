@@ -23,13 +23,15 @@ export function parseFilter(expr: string): FilterGroup {
   }
 
   const andParts = expr.split(/\s+AND\s+/)
-  const conditions: FilterCondition[] = andParts.map((p) => parseSingleCondition(p.trim()))
+  const conditions: FilterCondition[] = andParts.map((p) =>
+    parseSingleCondition(p.trim()),
+  )
   return { conditions, logic: 'AND' }
 }
 
 function parseSingleCondition(expr: string): FilterCondition {
   // Try ~= first (before = to avoid partial match)
-  let match = expr.match(/^([^!~<>=]+)(~=|!=|>=|<=|>|<|=)(.*)$/)
+  const match = expr.match(/^([^!~<>=]+)(~=|!=|>=|<=|>|<|=)(.*)$/)
   if (match) {
     return {
       field: match[1].trim(),
@@ -53,12 +55,17 @@ function matchCondition(row: any, condition: FilterCondition): boolean {
 
   // Check in custom_fields if not found on top level
   if (fieldValue === undefined || fieldValue === null) {
-    const custom = typeof row.custom_fields === 'string' ? safeJSON(row.custom_fields) : (row.custom_fields || {})
+    const custom =
+      typeof row.custom_fields === 'string'
+        ? safeJSON(row.custom_fields)
+        : row.custom_fields || {}
     fieldValue = custom[field]
   }
 
   if (fieldValue === undefined || fieldValue === null) {
-    if (op === '!=') return true
+    if (op === '!=') {
+      return true
+    }
     return false
   }
 

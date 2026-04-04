@@ -10,28 +10,37 @@ export function formatOutput(data: any, format: string, config?: any): string {
       return formatTSV(data)
     case 'ids':
       return formatIDs(data)
-    case 'table':
     default:
       return formatTable(data, config)
   }
 }
 
 function formatIDs(data: any[]): string {
-  if (!Array.isArray(data)) return ''
+  if (!Array.isArray(data)) {
+    return ''
+  }
   return data.map((r) => r.id).join('\n')
 }
 
 function formatCSV(data: any[]): string {
-  if (!Array.isArray(data) || data.length === 0) return ''
+  if (!Array.isArray(data) || data.length === 0) {
+    return ''
+  }
   const keys = Object.keys(data[0])
   const header = keys.map(csvEscape).join(',')
   const rows = data.map((row) =>
-    keys.map((k) => {
-      const v = row[k]
-      if (Array.isArray(v)) return csvEscape(v.join(', '))
-      if (v && typeof v === 'object') return csvEscape(JSON.stringify(v))
-      return csvEscape(String(v ?? ''))
-    }).join(','),
+    keys
+      .map((k) => {
+        const v = row[k]
+        if (Array.isArray(v)) {
+          return csvEscape(v.join(', '))
+        }
+        if (v && typeof v === 'object') {
+          return csvEscape(JSON.stringify(v))
+        }
+        return csvEscape(String(v ?? ''))
+      })
+      .join(','),
   )
   return [header, ...rows].join('\n')
 }
@@ -44,22 +53,32 @@ function csvEscape(s: string): string {
 }
 
 function formatTSV(data: any[]): string {
-  if (!Array.isArray(data) || data.length === 0) return ''
+  if (!Array.isArray(data) || data.length === 0) {
+    return ''
+  }
   const keys = Object.keys(data[0])
   const header = keys.join('\t')
   const rows = data.map((row) =>
-    keys.map((k) => {
-      const v = row[k]
-      if (Array.isArray(v)) return v.join(', ')
-      if (v && typeof v === 'object') return JSON.stringify(v)
-      return String(v ?? '')
-    }).join('\t'),
+    keys
+      .map((k) => {
+        const v = row[k]
+        if (Array.isArray(v)) {
+          return v.join(', ')
+        }
+        if (v && typeof v === 'object') {
+          return JSON.stringify(v)
+        }
+        return String(v ?? '')
+      })
+      .join('\t'),
   )
   return [header, ...rows].join('\n')
 }
 
 function formatTable(data: any, _config?: any): string {
-  if (!data || (Array.isArray(data) && data.length === 0)) return ''
+  if (!data || (Array.isArray(data) && data.length === 0)) {
+    return ''
+  }
   if (!Array.isArray(data)) {
     // Single entity display
     return formatEntityDetail(data)
@@ -84,18 +103,28 @@ function formatTable(data: any, _config?: any): string {
 }
 
 function displayValue(v: any): string {
-  if (v === null || v === undefined) return ''
-  if (Array.isArray(v)) return v.join(', ')
-  if (typeof v === 'object') return JSON.stringify(v)
+  if (v === null || v === undefined) {
+    return ''
+  }
+  if (Array.isArray(v)) {
+    return v.join(', ')
+  }
+  if (typeof v === 'object') {
+    return JSON.stringify(v)
+  }
   return String(v)
 }
 
 function formatEntityDetail(entity: any): string {
   const lines: string[] = []
   for (const [key, value] of Object.entries(entity)) {
-    if (value === null || value === undefined) continue
+    if (value === null || value === undefined) {
+      continue
+    }
     if (Array.isArray(value)) {
-      if (value.length === 0) continue
+      if (value.length === 0) {
+        continue
+      }
       if (typeof value[0] === 'object') {
         lines.push(`${key}:`)
         for (const item of value) {
@@ -122,7 +151,13 @@ export function contactToRow(c: any, config?: any): any {
   const companies: string[] = safeJSON(c.companies)
   const tags: string[] = safeJSON(c.tags)
   const custom: Record<string, any> = safeJSON(c.custom_fields)
-  const displayPhones = phones.map((p) => formatPhone(p, config?.phone?.display || 'international', config?.phone?.default_country))
+  const _displayPhones = phones.map((p) =>
+    formatPhone(
+      p,
+      config?.phone?.display || 'international',
+      config?.phone?.default_country,
+    ),
+  )
   return {
     id: c.id,
     name: c.name,
@@ -143,7 +178,13 @@ export function contactToRow(c: any, config?: any): any {
 export function contactToDisplay(c: any, config?: any): any {
   const row = contactToRow(c, config)
   const phones: string[] = safeJSON(c.phones)
-  row._display_phones = phones.map((p) => formatPhone(p, config?.phone?.display || 'international', config?.phone?.default_country))
+  row._display_phones = phones.map((p) =>
+    formatPhone(
+      p,
+      config?.phone?.display || 'international',
+      config?.phone?.default_country,
+    ),
+  )
   return row
 }
 
@@ -191,9 +232,18 @@ export function activityToRow(a: any): any {
 }
 
 export function safeJSON(val: any): any {
-  if (val === null || val === undefined) return typeof val === 'string' ? val : (Array.isArray(val) ? [] : {})
+  if (val === null || val === undefined) {
+    if (typeof val === 'string') {
+      return val
+    }
+    return Array.isArray(val) ? [] : {}
+  }
   if (typeof val === 'string') {
-    try { return JSON.parse(val) } catch { return val }
+    try {
+      return JSON.parse(val)
+    } catch {
+      return val
+    }
   }
   return val
 }

@@ -1,4 +1,4 @@
-import { parsePhoneNumberFromString, type CountryCode } from 'libphonenumber-js'
+import { type CountryCode, parsePhoneNumberFromString } from 'libphonenumber-js'
 import normalizeUrl from 'normalize-url'
 
 // ── Phone normalization ──
@@ -7,21 +7,25 @@ export function normalizePhone(input: string, defaultCountry?: string): string {
   const cleaned = input.trim()
   const country = defaultCountry as CountryCode | undefined
   let phone = parsePhoneNumberFromString(cleaned, country)
-  if (!phone && !cleaned.startsWith('+') && !country) {
+  if (!(phone || cleaned.startsWith('+') || country)) {
     // Try US as fallback for formatted numbers like (212) 555-1234
     phone = parsePhoneNumberFromString(cleaned, 'US')
-    if (phone && phone.isValid()) {
+    if (phone?.isValid()) {
       // Only use US fallback if it parses as valid
       // But we need to be strict: without explicit default_country, only accept if the input had formatting hints
-      const hasFormatting = /[\(\)\-\s]/.test(cleaned)
+      const hasFormatting = /[()\-\s]/.test(cleaned)
       if (!hasFormatting) {
-        throw new Error(`Invalid phone number: "${input}". No country code provided — set phone.default_country in config or prefix with +`)
+        throw new Error(
+          `Invalid phone number: "${input}". No country code provided — set phone.default_country in config or prefix with +`,
+        )
       }
     }
   }
   if (!phone) {
-    if (!defaultCountry && !cleaned.startsWith('+')) {
-      throw new Error(`Invalid phone number: "${input}". No country code provided — set phone.default_country in config or prefix with +`)
+    if (!(defaultCountry || cleaned.startsWith('+'))) {
+      throw new Error(
+        `Invalid phone number: "${input}". No country code provided — set phone.default_country in config or prefix with +`,
+      )
     }
     throw new Error(`Invalid phone number: "${input}"`)
   }
@@ -31,18 +35,29 @@ export function normalizePhone(input: string, defaultCountry?: string): string {
   return phone.format('E.164')
 }
 
-export function formatPhone(e164: string, display: string, defaultCountry?: string): string {
+export function formatPhone(
+  e164: string,
+  display: string,
+  _defaultCountry?: string,
+): string {
   const phone = parsePhoneNumberFromString(e164)
-  if (!phone) return e164
+  if (!phone) {
+    return e164
+  }
   switch (display) {
-    case 'e164': return phone.format('E.164')
-    case 'national': return phone.formatNational()
-    case 'international':
-    default: return phone.formatInternational()
+    case 'e164':
+      return phone.format('E.164')
+    case 'national':
+      return phone.formatNational()
+    default:
+      return phone.formatInternational()
   }
 }
 
-export function tryNormalizePhone(input: string, defaultCountry?: string): string | null {
+export function tryNormalizePhone(
+  input: string,
+  defaultCountry?: string,
+): string | null {
   try {
     return normalizePhone(input, defaultCountry)
   } catch {
@@ -85,18 +100,10 @@ export function tryNormalizeWebsite(input: string): string | null {
 // ── Social handle normalization ──
 
 const SOCIAL_PATTERNS: Record<string, RegExp[]> = {
-  linkedin: [
-    /(?:https?:\/\/)?(?:www\.)?linkedin\.com\/in\/([^/?#]+)\/?/i,
-  ],
-  x: [
-    /(?:https?:\/\/)?(?:www\.)?(?:x\.com|twitter\.com)\/([^/?#]+)\/?/i,
-  ],
-  bluesky: [
-    /(?:https?:\/\/)?(?:www\.)?bsky\.app\/profile\/([^/?#]+)\/?/i,
-  ],
-  telegram: [
-    /(?:https?:\/\/)?(?:www\.)?t\.me\/([^/?#]+)\/?/i,
-  ],
+  linkedin: [/(?:https?:\/\/)?(?:www\.)?linkedin\.com\/in\/([^/?#]+)\/?/i],
+  x: [/(?:https?:\/\/)?(?:www\.)?(?:x\.com|twitter\.com)\/([^/?#]+)\/?/i],
+  bluesky: [/(?:https?:\/\/)?(?:www\.)?bsky\.app\/profile\/([^/?#]+)\/?/i],
+  telegram: [/(?:https?:\/\/)?(?:www\.)?t\.me\/([^/?#]+)\/?/i],
 }
 
 export function normalizeSocialHandle(platform: string, input: string): string {
@@ -105,19 +112,27 @@ export function normalizeSocialHandle(platform: string, input: string): string {
   if (patterns) {
     for (const pattern of patterns) {
       const match = trimmed.match(pattern)
-      if (match) return match[1]
+      if (match) {
+        return match[1]
+      }
     }
   }
   // Strip leading @
-  if (trimmed.startsWith('@')) return trimmed.slice(1)
+  if (trimmed.startsWith('@')) {
+    return trimmed.slice(1)
+  }
   return trimmed
 }
 
-export function tryExtractSocialHandle(input: string): { platform: string; handle: string } | null {
+export function tryExtractSocialHandle(
+  input: string,
+): { platform: string; handle: string } | null {
   for (const [platform, patterns] of Object.entries(SOCIAL_PATTERNS)) {
     for (const pattern of patterns) {
       const match = input.match(pattern)
-      if (match) return { platform, handle: match[1] }
+      if (match) {
+        return { platform, handle: match[1] }
+      }
     }
   }
   return null

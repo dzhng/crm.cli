@@ -1,6 +1,6 @@
+import { describe, expect, test } from 'bun:test'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
-import { describe, expect, test } from 'bun:test'
 
 import { createTestContext } from './helpers.ts'
 
@@ -17,14 +17,27 @@ describe('global flags', () => {
     ctx.run('--db', customDB, 'contact', 'add', '--name', 'Jane')
     expect(existsSync(customDB)).toBe(true)
 
-    const contacts = ctx.runJSON<unknown[]>('--db', customDB, 'contact', 'list', '--format', 'json')
+    const contacts = ctx.runJSON<unknown[]>(
+      '--db',
+      customDB,
+      'contact',
+      'list',
+      '--format',
+      'json',
+    )
     expect(contacts).toHaveLength(1)
   })
 
   test('CRM_DB env var sets database path', () => {
     const ctx = createTestContext()
     const customDB = join(ctx.dir, 'env.db')
-    const result = ctx.runWithEnv({ CRM_DB: customDB }, 'contact', 'add', '--name', 'Jane')
+    const result = ctx.runWithEnv(
+      { CRM_DB: customDB },
+      'contact',
+      'add',
+      '--name',
+      'Jane',
+    )
     expect(result.exitCode).toBe(0)
     expect(result.stdout.trim()).toStartWith('ct_')
   })
@@ -32,7 +45,13 @@ describe('global flags', () => {
   test('CRM_FORMAT env var sets default format', () => {
     const ctx = createTestContext()
     ctx.runOK('contact', 'add', '--name', 'Jane')
-    const result = ctx.runWithEnv({ CRM_FORMAT: 'json' }, '--db', ctx.dbPath, 'contact', 'list')
+    const result = ctx.runWithEnv(
+      { CRM_FORMAT: 'json' },
+      '--db',
+      ctx.dbPath,
+      'contact',
+      'list',
+    )
     expect(result.exitCode).toBe(0)
     expect(result.stdout.trim()).toStartWith('[')
   })

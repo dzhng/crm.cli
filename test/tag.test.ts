@@ -5,7 +5,9 @@ import { createTestContext } from './helpers.ts'
 describe('tag', () => {
   test('tag contact by ID', () => {
     const ctx = createTestContext()
-    const id = ctx.runOK('contact', 'add', '--name', 'Jane', '--email', 'jane@acme.com').trim()
+    const id = ctx
+      .runOK('contact', 'add', '--name', 'Jane', '--email', 'jane@acme.com')
+      .trim()
     ctx.runOK('tag', id, 'hot-lead', 'enterprise')
 
     const show = ctx.runOK('contact', 'show', id)
@@ -43,10 +45,19 @@ describe('tag', () => {
 
   test('tagging is idempotent', () => {
     const ctx = createTestContext()
-    const id = ctx.runOK('contact', 'add', '--name', 'Jane', '--tag', 'vip').trim()
+    const id = ctx
+      .runOK('contact', 'add', '--name', 'Jane', '--tag', 'vip')
+      .trim()
     ctx.runOK('tag', id, 'vip')
 
-    const contacts = ctx.runJSON<unknown[]>('contact', 'list', '--tag', 'vip', '--format', 'json')
+    const contacts = ctx.runJSON<unknown[]>(
+      'contact',
+      'list',
+      '--tag',
+      'vip',
+      '--format',
+      'json',
+    )
     expect(contacts).toHaveLength(1)
   })
 })
@@ -54,7 +65,18 @@ describe('tag', () => {
 describe('untag', () => {
   test('removes tag', () => {
     const ctx = createTestContext()
-    const id = ctx.runOK('contact', 'add', '--name', 'Jane', '--tag', 'vip', '--tag', 'cold').trim()
+    const id = ctx
+      .runOK(
+        'contact',
+        'add',
+        '--name',
+        'Jane',
+        '--tag',
+        'vip',
+        '--tag',
+        'cold',
+      )
+      .trim()
     ctx.runOK('untag', id, 'cold')
 
     const show = ctx.runOK('contact', 'show', id)
@@ -66,7 +88,16 @@ describe('untag', () => {
 describe('tag list', () => {
   test('shows all tags with counts', () => {
     const ctx = createTestContext()
-    ctx.runOK('contact', 'add', '--name', 'Alice', '--tag', 'vip', '--tag', 'hot-lead')
+    ctx.runOK(
+      'contact',
+      'add',
+      '--name',
+      'Alice',
+      '--tag',
+      'vip',
+      '--tag',
+      'hot-lead',
+    )
     ctx.runOK('contact', 'add', '--name', 'Bob', '--tag', 'vip')
     ctx.runOK('company', 'add', '--name', 'Acme', '--tag', 'enterprise')
 
