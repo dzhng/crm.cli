@@ -242,6 +242,23 @@ describe('fuse: read contacts', () => {
     }
   })
 
+  test('_by-company lists contact under each linked company', () => {
+    const ctx = createFuseTestContext()
+    if (skipIfNoFuse(ctx)) return
+    try {
+      ctx.runOK('company', 'add', '--name', 'Acme Corp')
+      ctx.runOK('company', 'add', '--name', 'Globex')
+      ctx.runOK('contact', 'add', '--name', 'Jane', '--email', 'jane@acme.com', '--company', 'Acme Corp', '--company', 'Globex')
+
+      const acmeDir = join(ctx.mountPoint, 'contacts', '_by-company', 'acme-corp')
+      const globexDir = join(ctx.mountPoint, 'contacts', '_by-company', 'globex')
+      expect(readdirSync(acmeDir)).toHaveLength(1)
+      expect(readdirSync(globexDir)).toHaveLength(1)
+    } finally {
+      unmount(ctx)
+    }
+  })
+
   test('_by-tag groups contacts by tag', () => {
     const ctx = createFuseTestContext()
     if (skipIfNoFuse(ctx)) return
@@ -258,15 +275,18 @@ describe('fuse: read contacts', () => {
     }
   })
 
-  test('contact file includes linked deals and recent activity', () => {
+  test('contact file includes linked companies, deals, and recent activity', () => {
     const ctx = createFuseTestContext()
     if (skipIfNoFuse(ctx)) return
     try {
-      ctx.runOK('contact', 'add', '--name', 'Jane', '--email', 'jane@acme.com')
+      ctx.runOK('company', 'add', '--name', 'Acme Corp', '--website', 'acme.com')
+      ctx.runOK('contact', 'add', '--name', 'Jane', '--email', 'jane@acme.com', '--company', 'Acme Corp')
       ctx.runOK('deal', 'add', '--title', 'Big Deal', '--value', '50000', '--contact', 'jane@acme.com')
       ctx.runOK('log', 'note', 'jane@acme.com', 'Great call today')
 
       const data = JSON.parse(readFileSync(join(ctx.mountPoint, 'contacts', '_by-email', 'jane@acme.com.json'), 'utf-8'))
+      expect(data.companies).toHaveLength(1)
+      expect(data.companies[0].name).toBe('Acme Corp')
       expect(data.deals).toHaveLength(1)
       expect(data.deals[0].title).toBe('Big Deal')
       expect(data.recent_activity).toHaveLength(1)

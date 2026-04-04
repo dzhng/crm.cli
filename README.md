@@ -104,7 +104,7 @@ People you interact with.
 
 ```bash
 crm contact add --name "Jane Doe" --email jane@acme.com
-crm contact add --name "Jane Doe" --email jane@acme.com --email jane.doe@gmail.com --phone "+1-212-555-1234" --phone "+44-20-7946-0958" --company Acme --tag hot-lead --tag enterprise
+crm contact add --name "Jane Doe" --email jane@acme.com --email jane.doe@gmail.com --phone "+1-212-555-1234" --phone "+44-20-7946-0958" --company Acme --company "Acme Ventures" --tag hot-lead --tag enterprise
 crm contact add --name "Jane Doe" --email jane@acme.com --set title=CTO --set source=conference --set linkedin=linkedin.com/in/janedoe --set notes="Met at SaaStr"
 ```
 
@@ -113,7 +113,7 @@ crm contact add --name "Jane Doe" --email jane@acme.com --set title=CTO --set so
 | `--name` | yes | Full name |
 | `--email` | no | Email address (repeatable — multiple allowed) |
 | `--phone` | no | Phone number (repeatable — multiple allowed) |
-| `--company` | no | Company name (links to existing or creates stub) |
+| `--company` | no | Company name (repeatable — links to existing or creates stub) |
 | `--tag` | no | Tag (repeatable — multiple allowed) |
 | `--set` | no | Custom field as `key=value` (repeatable — multiple allowed) |
 
@@ -132,7 +132,7 @@ crm contact list --limit 10 --offset 20
 | Flag | Description |
 |------|-------------|
 | `--tag` | Filter by tag (multiple = AND) |
-| `--company` | Filter by company name |
+| `--company` | Filter by company name (matches any linked company) |
 | `--filter` | Filter expression (see Filtering) — works on both core and custom fields |
 | `--sort` | Sort field: `name`, `email`, `company`, `created`, `updated` |
 | `--reverse` | Reverse sort order |
@@ -155,6 +155,7 @@ Accepts ID, any email, or any phone number. Shows full contact details including
 crm contact edit jane@acme.com --name "Jane Smith"
 crm contact edit ct_01J8Z... --add-email jane.personal@gmail.com --rm-email old@acme.com
 crm contact edit ct_01J8Z... --add-phone "+44-20-7946-0958" --rm-phone "+1-310-555-9876"
+crm contact edit ct_01J8Z... --add-company "Acme Ventures" --rm-company "Old Corp"
 crm contact edit ct_01J8Z... --set title=CEO --set source=referral
 crm contact edit jane@acme.com --add-tag vip --rm-tag cold
 ```
@@ -166,7 +167,8 @@ crm contact edit jane@acme.com --add-tag vip --rm-tag cold
 | `--rm-email` | Remove an email address |
 | `--add-phone` | Add a phone number |
 | `--rm-phone` | Remove a phone number |
-| `--company` | Update company |
+| `--add-company` | Link to a company (creates stub if needed) |
+| `--rm-company` | Unlink from a company |
 | `--set` | Set custom field `key=value` |
 | `--unset` | Remove custom field |
 | `--add-tag` | Add tag |
@@ -187,7 +189,7 @@ Prompts for confirmation unless `--force` is passed. Removes the contact and unl
 crm contact merge ct_01J8Z... ct_02K9A...
 ```
 
-Merges two contacts. Keeps the first, absorbs data from the second. Emails, phones, tags, custom fields, and activity history are combined. Deals and company links on the second contact are relinked to the first. Prompts to resolve conflicts (e.g. different names) unless `--keep-first` is passed.
+Merges two contacts. Keeps the first, absorbs data from the second. Emails, phones, companies, tags, custom fields, and activity history are combined. Deals linked to the second contact are relinked to the first. Prompts to resolve conflicts (e.g. different names) unless `--keep-first` is passed.
 
 ---
 
@@ -683,7 +685,7 @@ Only a small set of fields are hard-coded per entity — everything else lives i
 
 | Entity | Hard-coded fields | Everything else → `custom_fields` |
 |--------|-------------------|-----------------------------------|
-| Contact | `name`, `emails[]`, `phones[]`, `company`, `tags[]` | title, source, linkedin, notes, ... |
+| Contact | `name`, `emails[]`, `phones[]`, `companies[]`, `tags[]` | title, source, linkedin, notes, ... |
 | Company | `name`, `websites[]`, `phones[]`, `tags[]` | industry, size, founded, ... |
 | Deal | `title`, `value`, `stage`, `contacts[]`, `company`, `expected_close`, `probability`, `tags[]` | source, channel, priority, ... |
 | Activity | `type`, `entity_ref`, `note`, `deal`, `at` | duration, outcome, attendees, ... |
@@ -890,7 +892,7 @@ The mount point stays live — changes made via the CLI or filesystem are reflec
 │   │   └── john@globex.com.json → ../ct_02K9A...john-smith.json
 │   ├── _by-phone/                         # symlinks for phone lookup (E.164 filenames)
 │   │   └── +12125551234.json → ../ct_01J8Z...jane-doe.json
-│   ├── _by-company/                       # symlinks grouped by company
+│   ├── _by-company/                       # symlinks grouped by company (contact appears under each)
 │   │   └── acme-corp/
 │   │       └── ct_01J8Z...jane-doe.json → ../../ct_01J8Z...jane-doe.json
 │   └── _by-tag/                           # symlinks grouped by tag
@@ -959,10 +961,9 @@ Each entity file is a self-contained JSON document with linked data inlined:
   "name": "Jane Doe",
   "emails": ["jane@acme.com", "jane.doe@gmail.com"],
   "phones": ["+12125551234"],
-  "company": {
-    "id": "co_01J8Z...",
-    "name": "Acme Corp"
-  },
+  "companies": [
+    { "id": "co_01J8Z...", "name": "Acme Corp" }
+  ],
   "tags": ["hot-lead", "enterprise"],
   "custom_fields": {
     "title": "CTO",

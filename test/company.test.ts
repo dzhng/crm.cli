@@ -200,7 +200,7 @@ describe('company rm', () => {
     ctx.runFail('company', 'show', id)
   })
 
-  test('does not delete linked contacts', () => {
+  test('does not delete linked contacts but unlinks company', () => {
     const ctx = createTestContext()
     const coID = ctx.runOK('company', 'add', '--name', 'Acme Corp').trim()
     const ctID = ctx.runOK('contact', 'add', '--name', 'Jane', '--email', 'jane@acme.com', '--company', 'Acme Corp').trim()
@@ -208,6 +208,7 @@ describe('company rm', () => {
     ctx.runOK('company', 'rm', coID, '--force')
     const show = ctx.runOK('contact', 'show', ctID)
     expect(show).toContain('Jane')
+    expect(show).not.toContain('Acme Corp')
   })
 })
 
@@ -349,6 +350,7 @@ describe('company merge', () => {
 
     const contactShow = ctx.runOK('contact', 'show', contact)
     expect(contactShow).toContain('Acme Corp')
+    expect(contactShow).not.toContain('Acme Inc')
   })
 
   test('merge relinks deals to surviving company', () => {

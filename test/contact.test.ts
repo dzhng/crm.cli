@@ -18,6 +18,7 @@ describe('contact add', () => {
         '--email', 'jane@acme.com',
         '--phone', '+1-212-555-1234',
         '--company', 'Acme Corp',
+        '--company', 'Acme Ventures',
         '--tag', 'hot-lead',
         '--tag', 'enterprise',
         '--set', 'title=CTO',
@@ -30,11 +31,25 @@ describe('contact add', () => {
     expect(show).toContain('Jane Doe')
     expect(show).toContain('jane@acme.com')
     expect(show).toContain('+1 212 555 1234')
+    expect(show).toContain('Acme Corp')
+    expect(show).toContain('Acme Ventures')
     expect(show).toContain('CTO')
     expect(show).toContain('conference')
     expect(show).toContain('hot-lead')
     expect(show).toContain('enterprise')
     expect(show).toContain('linkedin.com/in/janedoe')
+  })
+
+  test('multiple companies on create', () => {
+    const ctx = createTestContext()
+    const id = ctx.runOK(
+      'contact', 'add', '--name', 'Jane Doe',
+      '--company', 'Acme Corp', '--company', 'Globex',
+    ).trim()
+
+    const show = ctx.runOK('contact', 'show', id)
+    expect(show).toContain('Acme Corp')
+    expect(show).toContain('Globex')
   })
 
   test('fails without --name', () => {
@@ -303,6 +318,26 @@ describe('contact edit', () => {
     expect(show).toContain('+1 212 555 1234')
     expect(show).not.toContain('+1 310 555 9876')
   })
+
+  test('add company to existing contact', () => {
+    const ctx = createTestContext()
+    const id = ctx.runOK('contact', 'add', '--name', 'Jane', '--company', 'Acme Corp').trim()
+    ctx.runOK('contact', 'edit', id, '--add-company', 'Globex')
+
+    const show = ctx.runOK('contact', 'show', id)
+    expect(show).toContain('Acme Corp')
+    expect(show).toContain('Globex')
+  })
+
+  test('remove company from contact', () => {
+    const ctx = createTestContext()
+    const id = ctx.runOK('contact', 'add', '--name', 'Jane', '--company', 'Acme Corp', '--company', 'Old Corp').trim()
+    ctx.runOK('contact', 'edit', id, '--rm-company', 'Old Corp')
+
+    const show = ctx.runOK('contact', 'show', id)
+    expect(show).toContain('Acme Corp')
+    expect(show).not.toContain('Old Corp')
+  })
 })
 
 describe('contact rm', () => {
@@ -498,15 +533,17 @@ describe('contact merge', () => {
     expect(show).toContain('linkedin.com/in/jdoe')
   })
 
-  test('preserves company link', () => {
+  test('merge combines company links', () => {
     const ctx = createTestContext()
     ctx.runOK('company', 'add', '--name', 'Acme Corp', '--website', 'acme.com')
+    ctx.runOK('company', 'add', '--name', 'Globex', '--website', 'globex.com')
     const id1 = ctx.runOK('contact', 'add', '--name', 'Jane Doe', '--email', 'jane@acme.com', '--company', 'Acme Corp').trim()
-    const id2 = ctx.runOK('contact', 'add', '--name', 'J. Doe', '--email', 'jane.personal@gmail.com').trim()
+    const id2 = ctx.runOK('contact', 'add', '--name', 'J. Doe', '--email', 'jane.personal@gmail.com', '--company', 'Globex').trim()
 
     ctx.runOK('contact', 'merge', id1, id2, '--keep-first')
 
     const show = ctx.runOK('contact', 'show', id1)
     expect(show).toContain('Acme Corp')
+    expect(show).toContain('Globex')
   })
 })
