@@ -13,7 +13,7 @@ describe('search (keyword FTS5)', () => {
     expect(out).not.toContain('John Smith')
   })
 
-  test('search by email domain', () => {
+  test('search by email host', () => {
     const ctx = createTestContext()
     ctx.runOK('contact', 'add', '--name', 'Jane Doe', '--email', 'jane@acme.com')
 

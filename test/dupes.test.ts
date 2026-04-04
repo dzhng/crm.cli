@@ -45,7 +45,7 @@ describe('dupes', () => {
     expect(out).toContain('Jane D')
   })
 
-  test('finds likely duplicate companies by similar website hosts even with paths', () => {
+  test('finds likely duplicate companies by fuzzy name even when websites differ', () => {
     const ctx = createTestContext()
     ctx.runOK('company', 'add', '--name', 'Example Docs', '--website', 'example.com/research')
     ctx.runOK('company', 'add', '--name', 'Example Docs Inc', '--website', 'example.com/consulting')
