@@ -9,7 +9,7 @@
         "commander": "^13.1.0",
         "drizzle-orm": "^0.45.1",
         "libphonenumber-js": "^1.12.0",
-        "normalize-url": "^8.0.0",
+        "normalize-url": "^9.0.0",
         "toml": "^3.0.0",
         "ulid": "^2.3.0",
         "zod": "^4.3.6",
@@ -202,7 +202,7 @@
 
     "node-fetch": ["node-fetch@3.3.2", "", { "dependencies": { "data-uri-to-buffer": "^4.0.0", "fetch-blob": "^3.1.4", "formdata-polyfill": "^4.0.10" } }, "sha512-dRB78srN/l6gqWulah9SrxeYnxeddIG30+GOqK/9OlLVyLg3HPnr6SqOWTWOXKRwC2eGYCkZ59NNuSgvSrpgOA=="],
 
-    "normalize-url": ["normalize-url@8.1.1", "", {}, "sha512-JYc0DPlpGWB40kH5g07gGTrYuMqV653k3uBKY6uITPWds3M0ov3GaWGp9lbE3Bzngx8+XkfzgvASb9vk9JDFXQ=="],
+    "normalize-url": ["normalize-url@9.0.0", "", {}, "sha512-z9nC87iaZXXySbWWtTHfCFJyFvKaUAW6lODhikG7ILSbVgmwuFjUqkgnheHvAUcGedO29e2QGBRXMUD64aurqQ=="],
 
     "nypm": ["nypm@0.6.5", "", { "dependencies": { "citty": "^0.2.0", "pathe": "^2.0.3", "tinyexec": "^1.0.2" }, "bin": { "nypm": "dist/cli.mjs" } }, "sha512-K6AJy1GMVyfyMXRVB88700BJqNUkByijGJM8kEHpLdcAt+vSQAVfkWWHYzuRXHSY6xA2sNc5RjTj0p9rE2izVQ=="],
 

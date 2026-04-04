@@ -239,7 +239,7 @@ describe('company website normalization', () => {
 
   test('www variant treated as duplicate', () => {
     const ctx = createTestContext()
-    ctx.runOK('company', 'add', '--name', 'Acme Corp', '--website', 'acme.com')
+    ctx.runOK('company', 'add', '--name', 'Acme Corp', '--website', 'acme.com/labs')
 
     const result = ctx.runFail('company', 'add', '--name', 'Acme Inc', '--website', 'www.acme.com/labs')
     expect(result.stderr).toContain('duplicate')
@@ -301,6 +301,38 @@ describe('company website normalization', () => {
     const companies = ctx.runJSON<Array<{ websites: string[] }>>('company', 'list', '--format', 'json')
     expect(companies[0].websites).toHaveLength(1)
     expect(companies[0].websites[0]).toBe('acme.com/ventures')
+  })
+
+  test('query params stripped during normalization', () => {
+    const ctx = createTestContext()
+    ctx.runOK('company', 'add', '--name', 'Acme', '--website', 'acme.com/pricing?ref=google&utm_source=ads')
+
+    const companies = ctx.runJSON<Array<{ websites: string[] }>>('company', 'list', '--format', 'json')
+    expect(companies[0].websites[0]).toBe('acme.com/pricing')
+  })
+
+  test('hash fragments stripped during normalization', () => {
+    const ctx = createTestContext()
+    ctx.runOK('company', 'add', '--name', 'Acme', '--website', 'acme.com/docs#installation')
+
+    const companies = ctx.runJSON<Array<{ websites: string[] }>>('company', 'list', '--format', 'json')
+    expect(companies[0].websites[0]).toBe('acme.com/docs')
+  })
+
+  test('query params and hash treated as duplicate of clean URL', () => {
+    const ctx = createTestContext()
+    ctx.runOK('company', 'add', '--name', 'Acme Corp', '--website', 'acme.com/pricing')
+
+    const result = ctx.runFail('company', 'add', '--name', 'Acme Inc', '--website', 'acme.com/pricing?ref=google#top')
+    expect(result.stderr).toContain('duplicate')
+  })
+
+  test('lookup works with query params and hash in URL', () => {
+    const ctx = createTestContext()
+    ctx.runOK('company', 'add', '--name', 'Acme', '--website', 'acme.com')
+
+    const show = ctx.runOK('company', 'show', 'acme.com?utm_source=linkedin#about')
+    expect(show).toContain('Acme')
   })
 
   test('websites stored as normalized in JSON output', () => {
