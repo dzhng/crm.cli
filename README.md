@@ -1011,43 +1011,6 @@ search_limit = 20               # max results for search/ virtual files
 
 ---
 
-## Architecture
-
-```
-src/
-  cli.ts              CLI entrypoint
-  db.ts               Drizzle ORM schema + SQLite setup
-  schemas.ts          Zod validation schemas
-  commands/
-    contact.ts        Contact CRUD
-    company.ts        Company CRUD
-    deal.ts           Deal CRUD + pipeline
-    activity.ts       Activity logging
-    tag.ts            Tag management
-    search.ts         Search + semantic find
-    report.ts         Reports
-    import-export.ts  CSV/JSON import/export
-    mount.ts          FUSE mount/unmount commands
-  lib/
-    format.ts         Output formatting (table, json, csv, tsv, ids)
-    filter.ts         Filter expression parsing
-    hooks.ts          Hook execution
-    config.ts         Config loading (TOML)
-    id.ts             Prefixed ULID generation
-  search/
-    fts.ts            FTS5 keyword search
-    semantic.ts       Local embedding vector search
-  fuse/
-    fs.ts             FUSE filesystem implementation
-    layout.ts         Directory tree + symlink generation
-    read.ts           Read handlers (entity files, reports, search)
-    write.ts          Write handlers (create, update, delete)
-test/
-  *.test.ts           Functional CLI tests (bun test)
-```
-
-The CLI is a thin wrapper around a TypeScript library (`src/`). Other interfaces (TUI, HTTP API, SDK) can import the same modules.
-
 ## Stack
 
 - **Runtime:** [Bun](https://bun.sh)
