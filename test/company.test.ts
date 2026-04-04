@@ -452,5 +452,13 @@ describe('company auto-creation', () => {
     const companies = ctx.runJSON<unknown[]>('company', 'list', '--format', 'json')
     expect(companies).toHaveLength(1)
   })
+
+  test('deal add with --company auto-creates company stub', () => {
+    const ctx = createTestContext()
+    ctx.runOK('deal', 'add', '--title', 'Big Deal', '--company', 'NewCo')
+
+    const companies = ctx.runJSON<unknown[]>('company', 'list', '--format', 'json')
+    expect(companies).toHaveLength(1)
+  })
 })
 

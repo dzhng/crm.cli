@@ -21,9 +21,10 @@ describe('contact add', () => {
         '--company', 'Acme Ventures',
         '--tag', 'hot-lead',
         '--tag', 'enterprise',
+        '--linkedin', 'linkedin.com/in/janedoe',
+        '--x', 'janedoe',
         '--set', 'title=CTO',
         '--set', 'source=conference',
-        '--set', 'linkedin=linkedin.com/in/janedoe',
       )
       .trim()
 
@@ -33,11 +34,12 @@ describe('contact add', () => {
     expect(show).toContain('+1 212 555 1234')
     expect(show).toContain('Acme Corp')
     expect(show).toContain('Acme Ventures')
+    expect(show).toContain('linkedin.com/in/janedoe')
+    expect(show).toContain('janedoe')
     expect(show).toContain('CTO')
     expect(show).toContain('conference')
     expect(show).toContain('hot-lead')
     expect(show).toContain('enterprise')
-    expect(show).toContain('linkedin.com/in/janedoe')
   })
 
   test('multiple companies on create', () => {
@@ -468,6 +470,100 @@ describe('contact phone normalization', () => {
   })
 })
 
+describe('contact social handles', () => {
+  test('add with social handles', () => {
+    const ctx = createTestContext()
+    const id = ctx.runOK(
+      'contact', 'add', '--name', 'Jane Doe',
+      '--linkedin', 'linkedin.com/in/janedoe',
+      '--x', 'janedoe',
+      '--bluesky', 'janedoe.bsky.social',
+      '--telegram', 'janedoe',
+    ).trim()
+
+    const show = ctx.runOK('contact', 'show', id)
+    expect(show).toContain('linkedin.com/in/janedoe')
+    expect(show).toContain('janedoe.bsky.social')
+  })
+
+  test('lookup by LinkedIn handle', () => {
+    const ctx = createTestContext()
+    ctx.runOK('contact', 'add', '--name', 'Jane Doe', '--linkedin', 'linkedin.com/in/janedoe')
+
+    const show = ctx.runOK('contact', 'show', 'linkedin.com/in/janedoe')
+    expect(show).toContain('Jane Doe')
+  })
+
+  test('lookup by X handle', () => {
+    const ctx = createTestContext()
+    ctx.runOK('contact', 'add', '--name', 'Jane Doe', '--x', 'janedoe')
+
+    const show = ctx.runOK('contact', 'show', 'janedoe')
+    expect(show).toContain('Jane Doe')
+  })
+
+  test('duplicate LinkedIn handle rejected', () => {
+    const ctx = createTestContext()
+    ctx.runOK('contact', 'add', '--name', 'Jane', '--linkedin', 'linkedin.com/in/janedoe')
+
+    const result = ctx.runFail('contact', 'add', '--name', 'Bob', '--linkedin', 'linkedin.com/in/janedoe')
+    expect(result.stderr).toContain('duplicate')
+  })
+
+  test('duplicate X handle rejected', () => {
+    const ctx = createTestContext()
+    ctx.runOK('contact', 'add', '--name', 'Jane', '--x', 'janedoe')
+
+    const result = ctx.runFail('contact', 'add', '--name', 'Bob', '--x', 'janedoe')
+    expect(result.stderr).toContain('duplicate')
+  })
+
+  test('duplicate Bluesky handle rejected', () => {
+    const ctx = createTestContext()
+    ctx.runOK('contact', 'add', '--name', 'Jane', '--bluesky', 'janedoe.bsky.social')
+
+    const result = ctx.runFail('contact', 'add', '--name', 'Bob', '--bluesky', 'janedoe.bsky.social')
+    expect(result.stderr).toContain('duplicate')
+  })
+
+  test('duplicate Telegram handle rejected', () => {
+    const ctx = createTestContext()
+    ctx.runOK('contact', 'add', '--name', 'Jane', '--telegram', 'janedoe')
+
+    const result = ctx.runFail('contact', 'add', '--name', 'Bob', '--telegram', 'janedoe')
+    expect(result.stderr).toContain('duplicate')
+  })
+
+  test('edit social handles', () => {
+    const ctx = createTestContext()
+    const id = ctx.runOK('contact', 'add', '--name', 'Jane', '--x', 'oldhandle').trim()
+    ctx.runOK('contact', 'edit', id, '--x', 'newhandle', '--linkedin', 'linkedin.com/in/janedoe')
+
+    const show = ctx.runOK('contact', 'show', id)
+    expect(show).toContain('newhandle')
+    expect(show).toContain('linkedin.com/in/janedoe')
+    expect(show).not.toContain('oldhandle')
+  })
+
+  test('unset social handle', () => {
+    const ctx = createTestContext()
+    const id = ctx.runOK('contact', 'add', '--name', 'Jane', '--linkedin', 'linkedin.com/in/janedoe').trim()
+    ctx.runOK('contact', 'edit', id, '--unset', 'linkedin')
+
+    const show = ctx.runOK('contact', 'show', id)
+    expect(show).not.toContain('linkedin.com/in/janedoe')
+  })
+
+  test('social handles stored in JSON output', () => {
+    const ctx = createTestContext()
+    ctx.runOK('contact', 'add', '--name', 'Jane', '--linkedin', 'linkedin.com/in/janedoe', '--x', 'janedoe')
+
+    const contacts = ctx.runJSON<Array<{ linkedin: string | null; x: string | null }>>('contact', 'list', '--format', 'json')
+    expect(contacts[0].linkedin).toBe('linkedin.com/in/janedoe')
+    expect(contacts[0].x).toBe('janedoe')
+  })
+})
+
 describe('contact merge', () => {
   test('merges two contacts keeping first', () => {
     const ctx = createTestContext()
@@ -521,16 +617,18 @@ describe('contact merge', () => {
     expect(activities).toHaveLength(1)
   })
 
-  test('merge combines custom fields', () => {
+  test('merge combines custom fields and social handles', () => {
     const ctx = createTestContext()
-    const id1 = ctx.runOK('contact', 'add', '--name', 'Jane', '--set', 'title=CTO').trim()
-    const id2 = ctx.runOK('contact', 'add', '--name', 'J. Doe', '--set', 'linkedin=linkedin.com/in/jdoe').trim()
+    const id1 = ctx.runOK('contact', 'add', '--name', 'Jane', '--set', 'title=CTO', '--x', 'janedoe').trim()
+    const id2 = ctx.runOK('contact', 'add', '--name', 'J. Doe', '--linkedin', 'linkedin.com/in/jdoe', '--set', 'source=inbound').trim()
 
     ctx.runOK('contact', 'merge', id1, id2, '--keep-first')
 
     const show = ctx.runOK('contact', 'show', id1)
     expect(show).toContain('CTO')
+    expect(show).toContain('janedoe')
     expect(show).toContain('linkedin.com/in/jdoe')
+    expect(show).toContain('inbound')
   })
 
   test('merge combines company links', () => {

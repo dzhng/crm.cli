@@ -73,13 +73,17 @@ describe('fuse: directory layout', () => {
     }
   })
 
-  test('contacts/ has _by-email, _by-phone, _by-company, _by-tag subdirs', () => {
+  test('contacts/ has _by-email, _by-phone, _by-linkedin, _by-x, _by-bluesky, _by-telegram, _by-company, _by-tag subdirs', () => {
     const ctx = createFuseTestContext()
     if (skipIfNoFuse(ctx)) return
     try {
       const entries = readdirSync(join(ctx.mountPoint, 'contacts'))
       expect(entries).toContain('_by-email')
       expect(entries).toContain('_by-phone')
+      expect(entries).toContain('_by-linkedin')
+      expect(entries).toContain('_by-x')
+      expect(entries).toContain('_by-bluesky')
+      expect(entries).toContain('_by-telegram')
       expect(entries).toContain('_by-company')
       expect(entries).toContain('_by-tag')
     } finally {
@@ -226,6 +230,22 @@ describe('fuse: read contacts', () => {
     }
   })
 
+  test('_by-linkedin and _by-x have symlinks for social handles', () => {
+    const ctx = createFuseTestContext()
+    if (skipIfNoFuse(ctx)) return
+    try {
+      ctx.runOK('contact', 'add', '--name', 'Jane', '--linkedin', 'linkedin.com/in/janedoe', '--x', 'janedoe')
+
+      const byLinkedin = readdirSync(join(ctx.mountPoint, 'contacts', '_by-linkedin'))
+      expect(byLinkedin).toHaveLength(1)
+
+      const byX = readdirSync(join(ctx.mountPoint, 'contacts', '_by-x'))
+      expect(byX).toContain('janedoe.json')
+    } finally {
+      unmount(ctx)
+    }
+  })
+
   test('_by-company groups contacts by company', () => {
     const ctx = createFuseTestContext()
     if (skipIfNoFuse(ctx)) return
@@ -275,16 +295,18 @@ describe('fuse: read contacts', () => {
     }
   })
 
-  test('contact file includes linked companies, deals, and recent activity', () => {
+  test('contact file includes social handles, linked companies, deals, and recent activity', () => {
     const ctx = createFuseTestContext()
     if (skipIfNoFuse(ctx)) return
     try {
       ctx.runOK('company', 'add', '--name', 'Acme Corp', '--website', 'acme.com')
-      ctx.runOK('contact', 'add', '--name', 'Jane', '--email', 'jane@acme.com', '--company', 'Acme Corp')
+      ctx.runOK('contact', 'add', '--name', 'Jane', '--email', 'jane@acme.com', '--company', 'Acme Corp', '--linkedin', 'linkedin.com/in/janedoe', '--x', 'janedoe')
       ctx.runOK('deal', 'add', '--title', 'Big Deal', '--value', '50000', '--contact', 'jane@acme.com')
       ctx.runOK('log', 'note', 'jane@acme.com', 'Great call today')
 
       const data = JSON.parse(readFileSync(join(ctx.mountPoint, 'contacts', '_by-email', 'jane@acme.com.json'), 'utf-8'))
+      expect(data.linkedin).toBe('linkedin.com/in/janedoe')
+      expect(data.x).toBe('janedoe')
       expect(data.companies).toHaveLength(1)
       expect(data.companies[0].name).toBe('Acme Corp')
       expect(data.deals).toHaveLength(1)
