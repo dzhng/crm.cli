@@ -87,12 +87,12 @@ describe('fuse: directory layout', () => {
     }
   })
 
-  test('companies/ has _by-domain, _by-phone, _by-tag subdirs', () => {
+  test('companies/ has _by-website, _by-phone, _by-tag subdirs', () => {
     const ctx = createFuseTestContext()
     if (skipIfNoFuse(ctx)) return
     try {
       const entries = readdirSync(join(ctx.mountPoint, 'companies'))
-      expect(entries).toContain('_by-domain')
+      expect(entries).toContain('_by-website')
       expect(entries).toContain('_by-phone')
       expect(entries).toContain('_by-tag')
     } finally {
@@ -282,11 +282,11 @@ describe('fuse: read companies', () => {
     const ctx = createFuseTestContext()
     if (skipIfNoFuse(ctx)) return
     try {
-      ctx.runOK('company', 'add', '--name', 'Acme Corp', '--domain', 'acme.com')
+      ctx.runOK('company', 'add', '--name', 'Acme Corp', '--website', 'acme.com')
       ctx.runOK('contact', 'add', '--name', 'Jane', '--email', 'jane@acme.com', '--company', 'Acme Corp')
       ctx.runOK('deal', 'add', '--title', 'Acme Deal', '--company', 'acme.com')
 
-      const data = JSON.parse(readFileSync(join(ctx.mountPoint, 'companies', '_by-domain', 'acme.com.json'), 'utf-8'))
+      const data = JSON.parse(readFileSync(join(ctx.mountPoint, 'companies', '_by-website', 'acme.com.json'), 'utf-8'))
       expect(data.name).toBe('Acme Corp')
       expect(data.contacts.length).toBeGreaterThanOrEqual(1)
       expect(data.deals.length).toBeGreaterThanOrEqual(1)
@@ -295,15 +295,15 @@ describe('fuse: read companies', () => {
     }
   })
 
-  test('company with multiple domains has multiple symlinks', () => {
+  test('company with multiple websites has multiple symlinks', () => {
     const ctx = createFuseTestContext()
     if (skipIfNoFuse(ctx)) return
     try {
-      ctx.runOK('company', 'add', '--name', 'Acme', '--domain', 'acme.com', '--domain', 'acme.co.uk')
+      ctx.runOK('company', 'add', '--name', 'Acme', '--website', 'acme.com', '--website', 'acme.co.uk')
 
-      const byDomain = readdirSync(join(ctx.mountPoint, 'companies', '_by-domain'))
-      expect(byDomain).toContain('acme.com.json')
-      expect(byDomain).toContain('acme.co.uk.json')
+      const byWebsite = readdirSync(join(ctx.mountPoint, 'companies', '_by-website'))
+      expect(byWebsite).toContain('acme.com.json')
+      expect(byWebsite).toContain('acme.co.uk.json')
     } finally {
       unmount(ctx)
     }
@@ -540,7 +540,7 @@ describe('fuse: write operations', () => {
     try {
       writeFileSync(
         join(ctx.mountPoint, 'companies', 'new.json'),
-        JSON.stringify({ name: 'Globex Corp', domains: ['globex.com'], industry: 'Manufacturing' }),
+        JSON.stringify({ name: 'Globex Corp', websites: ['globex.com'], industry: 'Manufacturing' }),
       )
 
       const companies = ctx.runJSON<Array<{ name: string }>>('company', 'list', '--format', 'json')

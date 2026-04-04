@@ -12,7 +12,7 @@ describe('deal add', () => {
   test('full add stores all fields', () => {
     const ctx = createTestContext()
     ctx.runOK('contact', 'add', '--name', 'Jane', '--email', 'jane@acme.com')
-    ctx.runOK('company', 'add', '--name', 'Acme', '--domain', 'acme.com')
+    ctx.runOK('company', 'add', '--name', 'Acme', '--website', 'acme.com')
 
     const id = ctx
       .runOK(
@@ -200,7 +200,7 @@ describe('pipeline', () => {
 
   test('deal show includes linked company', () => {
     const ctx = createTestContext()
-    ctx.runOK('company', 'add', '--name', 'Acme', '--domain', 'acme.com')
+    ctx.runOK('company', 'add', '--name', 'Acme', '--website', 'acme.com')
     const id = ctx.runOK('deal', 'add', '--title', 'Acme Deal', '--company', 'acme.com').trim()
 
     const coShow = ctx.runOK('company', 'show', 'acme.com')

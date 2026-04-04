@@ -516,7 +516,7 @@ describe('contact merge', () => {
 
   test('preserves company link when merging duplicate contacts', () => {
     const ctx = createTestContext()
-    ctx.runOK('company', 'add', '--name', 'Acme Corp', '--domain', 'acme.com')
+    ctx.runOK('company', 'add', '--name', 'Acme Corp', '--website', 'acme.com')
     const first = ctx.runOK('contact', 'add', '--name', 'Jane Doe', '--email', 'jane@acme.com', '--company', 'Acme Corp').trim()
     const second = ctx.runOK('contact', 'add', '--name', 'J. Doe', '--email', 'jane.personal@gmail.com').trim()
 

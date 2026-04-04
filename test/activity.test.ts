@@ -108,7 +108,7 @@ describe('activity list', () => {
 
   test('activity on company', () => {
     const ctx = createTestContext()
-    ctx.runOK('company', 'add', '--name', 'Acme', '--domain', 'acme.com')
+    ctx.runOK('company', 'add', '--name', 'Acme', '--website', 'acme.com')
     ctx.runOK('log', 'note', 'acme.com', 'Company-level note')
 
     const activities = ctx.runJSON<unknown[]>('activity', 'list', '--company', 'acme.com', '--format', 'json')

@@ -283,7 +283,7 @@ describe('company website normalization', () => {
     expect(show3).toContain('Acme')
   })
 
-  test('add-domain rejects duplicate in different format', () => {
+  test('add-website rejects duplicate in different format', () => {
     const ctx = createTestContext()
     const id = ctx.runOK('company', 'add', '--name', 'Acme', '--website', 'acme.com').trim()
 
@@ -291,7 +291,7 @@ describe('company website normalization', () => {
     expect(result.stderr).toContain('duplicate')
   })
 
-  test('rm-domain matches after normalization', () => {
+  test('rm-website matches after normalization', () => {
     const ctx = createTestContext()
     const id = ctx.runOK('company', 'add', '--name', 'Acme', '--website', 'acme.com', '--website', 'acme.com/pricing').trim()
 

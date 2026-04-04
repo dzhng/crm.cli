@@ -77,7 +77,7 @@ John Smith,john@globex.com,,Globex,Engineer,inbound,`
 describe('import companies', () => {
   test('import CSV', () => {
     const ctx = createTestContext()
-    const csv = `name,domain,industry,size\nAcme Corp,acme.com,SaaS,50-200\nGlobex,globex.com,Manufacturing,1000+\n`
+    const csv = `name,website,industry,size\nAcme Corp,acme.com,SaaS,50-200\nGlobex,globex.com,Manufacturing,1000+\n`
     const csvPath = join(ctx.dir, 'companies.csv')
     writeFileSync(csvPath, csv)
 

@@ -13,9 +13,9 @@ describe('tag', () => {
     expect(show).toContain('enterprise')
   })
 
-  test('tag company by domain', () => {
+  test('tag company by website', () => {
     const ctx = createTestContext()
-    ctx.runOK('company', 'add', '--name', 'Acme', '--domain', 'acme.com')
+    ctx.runOK('company', 'add', '--name', 'Acme', '--website', 'acme.com')
     ctx.runOK('tag', 'acme.com', 'target-account')
 
     const show = ctx.runOK('company', 'show', 'acme.com')

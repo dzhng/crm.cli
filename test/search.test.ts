@@ -24,7 +24,7 @@ describe('search (keyword FTS5)', () => {
   test('search across entity types', () => {
     const ctx = createTestContext()
     ctx.runOK('contact', 'add', '--name', 'Jane Doe', '--company', 'Acme')
-    ctx.runOK('company', 'add', '--name', 'Acme Corp', '--domain', 'acme.com')
+    ctx.runOK('company', 'add', '--name', 'Acme Corp', '--website', 'acme.com')
     ctx.runOK('deal', 'add', '--title', 'Acme Enterprise Deal')
 
     const out = ctx.runOK('search', 'Acme')

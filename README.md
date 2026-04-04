@@ -1106,7 +1106,7 @@ search_limit = 20               # max results for search/ virtual files
 - **Language:** TypeScript (strict mode)
 - **Database:** SQLite via [libSQL](https://github.com/tursodatabase/libsql) + [Drizzle ORM](https://orm.drizzle.team)
 - **Phone normalization:** [libphonenumber-js](https://gitlab.com/nicolo-ribaudo/libphonenumber-js) (E.164)
-- **Domain normalization:** [normalize-url](https://github.com/sindresorhus/normalize-url)
+- **Website normalization:** [normalize-url](https://github.com/sindresorhus/normalize-url)
 - **Validation:** [Zod](https://zod.dev)
 - **Linting:** [Biome](https://biomejs.dev) via [Ultracite](https://github.com/haydenbleasel/ultracite)
 - **Testing:** `bun test` (functional tests at the CLI level)
