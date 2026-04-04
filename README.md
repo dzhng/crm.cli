@@ -199,7 +199,7 @@ Organizations that contacts belong to.
 
 ```bash
 crm company add --name "Acme Corp" --website acme.com
-crm company add --name "Acme Corp" --website acme.com/pricing --website acme.co.uk --phone "+1-212-555-1234" --phone "+44-20-7946-0958" --tag enterprise --set industry=SaaS --set size=50-200
+crm company add --name "Acme Corp" --website acme.com/ventures --website acme.co.uk --phone "+1-212-555-1234" --phone "+44-20-7946-0958" --tag enterprise --set industry=SaaS --set size=50-200
 ```
 
 | Flag | Required | Description |
@@ -765,29 +765,29 @@ Input is normalized for consistent storage and lookup:
 - drop the trailing slash only when there is no path
 
 ```bash
-crm company add --name "Acme" --website "https://www.Acme.com/about"
-# Stored as: acme.com/about
+crm company add --name "Acme" --website "https://www.Acme.com/labs"
+# Stored as: acme.com/labs
 ```
 
 This means path-based companies can remain distinct:
 
 ```bash
-crm company add --name "Example Docs" --website "example.com/a"
-crm company add --name "Example Pricing" --website "example.com/b"
+crm company add --name "Globex Research" --website "globex.com/research"
+crm company add --name "Globex Consulting" --website "globex.com/consulting"
 ```
 
 **Dedup:** exact match after normalization is a duplicate. The same normalized website cannot belong to two different companies:
 
 ```bash
-crm company add --name "Acme Corp" --website "acme.com/about"
-crm company add --name "Acme Inc" --website "www.acme.com/about"    # fails: duplicate website
+crm company add --name "Acme Corp" --website "acme.com/labs"
+crm company add --name "Acme Inc" --website "www.acme.com/labs"    # fails: duplicate website
 ```
 
 **Different paths are distinct:**
 
 ```bash
-crm company add --name "Example Docs" --website "example.com/a"
-crm company add --name "Example Pricing" --website "example.com/b"   # allowed — different path
+crm company add --name "Globex Research" --website "globex.com/research"
+crm company add --name "Globex Consulting" --website "globex.com/consulting"  # allowed — different path
 ```
 
 **Subdomains are distinct:**
@@ -800,8 +800,8 @@ crm company add --name "Acme EU" --website "eu.acme.com"            # allowed �
 **Lookup:** equivalent input formats resolve to the same normalized website:
 
 ```bash
-crm company show "https://www.acme.com/about"
-crm company show "ACME.COM/about"
+crm company show "https://www.acme.com/labs"
+crm company show "ACME.COM/labs"
 ```
 
 **FUSE:** `_by-website/` symlinks use the normalized website value, encoded as a filename-safe path.
