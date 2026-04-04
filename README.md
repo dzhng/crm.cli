@@ -124,7 +124,21 @@ crm contact add --name "Jane Doe" --linkedin https://linkedin.com/in/janedoe   #
 
 Prints the created contact ID to stdout.
 
-Social handles enforce uniqueness — no two contacts can share the same handle on a given platform. URLs are accepted on input and the handle is extracted automatically (e.g. `linkedin.com/in/janedoe` → `janedoe`, `x.com/janedoe` → `janedoe`, `t.me/janedoe` → `janedoe`).
+Social handles enforce uniqueness — no two contacts can share the same handle on a given platform. All of these input formats are accepted and normalized to the raw handle:
+
+| Input | Stored as |
+|-------|-----------|
+| `janedoe` | `janedoe` |
+| `@janedoe` | `janedoe` |
+| `https://linkedin.com/in/janedoe` | `janedoe` |
+| `linkedin.com/in/janedoe` | `janedoe` |
+| `www.linkedin.com/in/janedoe` | `janedoe` |
+| `x.com/janedoe` | `janedoe` |
+| `twitter.com/janedoe` | `janedoe` |
+| `bsky.app/profile/user.bsky.social` | `user.bsky.social` |
+| `t.me/janedoe` | `janedoe` |
+
+The same normalization applies to lookups, edits, and duplicate detection — `crm contact show x.com/janedoe` matches a contact stored with handle `janedoe`.
 
 #### `crm contact list`
 

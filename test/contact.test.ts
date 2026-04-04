@@ -517,6 +517,143 @@ describe('contact social handles', () => {
     expect(contacts[0].telegram).toBe('janedoe')
   })
 
+  test('LinkedIn URL without protocol', () => {
+    const ctx = createTestContext()
+    ctx.runOK('contact', 'add', '--name', 'Jane Doe', '--linkedin', 'linkedin.com/in/janedoe')
+
+    const contacts = ctx.runJSON<Array<{ linkedin: string }>>('contact', 'list', '--format', 'json')
+    expect(contacts[0].linkedin).toBe('janedoe')
+  })
+
+  test('LinkedIn URL with www', () => {
+    const ctx = createTestContext()
+    ctx.runOK('contact', 'add', '--name', 'Jane Doe', '--linkedin', 'www.linkedin.com/in/janedoe')
+
+    const contacts = ctx.runJSON<Array<{ linkedin: string }>>('contact', 'list', '--format', 'json')
+    expect(contacts[0].linkedin).toBe('janedoe')
+  })
+
+  test('LinkedIn URL with http instead of https', () => {
+    const ctx = createTestContext()
+    ctx.runOK('contact', 'add', '--name', 'Jane Doe', '--linkedin', 'http://linkedin.com/in/janedoe')
+
+    const contacts = ctx.runJSON<Array<{ linkedin: string }>>('contact', 'list', '--format', 'json')
+    expect(contacts[0].linkedin).toBe('janedoe')
+  })
+
+  test('LinkedIn URL with trailing slash', () => {
+    const ctx = createTestContext()
+    ctx.runOK('contact', 'add', '--name', 'Jane Doe', '--linkedin', 'linkedin.com/in/janedoe/')
+
+    const contacts = ctx.runJSON<Array<{ linkedin: string }>>('contact', 'list', '--format', 'json')
+    expect(contacts[0].linkedin).toBe('janedoe')
+  })
+
+  test('X URL without protocol', () => {
+    const ctx = createTestContext()
+    ctx.runOK('contact', 'add', '--name', 'Jane Doe', '--x', 'x.com/janedoe')
+
+    const contacts = ctx.runJSON<Array<{ x: string }>>('contact', 'list', '--format', 'json')
+    expect(contacts[0].x).toBe('janedoe')
+  })
+
+  test('X via twitter.com domain', () => {
+    const ctx = createTestContext()
+    ctx.runOK('contact', 'add', '--name', 'Jane Doe', '--x', 'twitter.com/janedoe')
+
+    const contacts = ctx.runJSON<Array<{ x: string }>>('contact', 'list', '--format', 'json')
+    expect(contacts[0].x).toBe('janedoe')
+  })
+
+  test('X via twitter.com with https', () => {
+    const ctx = createTestContext()
+    ctx.runOK('contact', 'add', '--name', 'Jane Doe', '--x', 'https://twitter.com/janedoe')
+
+    const contacts = ctx.runJSON<Array<{ x: string }>>('contact', 'list', '--format', 'json')
+    expect(contacts[0].x).toBe('janedoe')
+  })
+
+  test('X handle with @ prefix', () => {
+    const ctx = createTestContext()
+    ctx.runOK('contact', 'add', '--name', 'Jane Doe', '--x', '@janedoe')
+
+    const contacts = ctx.runJSON<Array<{ x: string }>>('contact', 'list', '--format', 'json')
+    expect(contacts[0].x).toBe('janedoe')
+  })
+
+  test('Bluesky URL without protocol', () => {
+    const ctx = createTestContext()
+    ctx.runOK('contact', 'add', '--name', 'Jane Doe', '--bluesky', 'bsky.app/profile/janedoe.bsky.social')
+
+    const contacts = ctx.runJSON<Array<{ bluesky: string }>>('contact', 'list', '--format', 'json')
+    expect(contacts[0].bluesky).toBe('janedoe.bsky.social')
+  })
+
+  test('Bluesky handle with @ prefix', () => {
+    const ctx = createTestContext()
+    ctx.runOK('contact', 'add', '--name', 'Jane Doe', '--bluesky', '@janedoe.bsky.social')
+
+    const contacts = ctx.runJSON<Array<{ bluesky: string }>>('contact', 'list', '--format', 'json')
+    expect(contacts[0].bluesky).toBe('janedoe.bsky.social')
+  })
+
+  test('Telegram URL without protocol', () => {
+    const ctx = createTestContext()
+    ctx.runOK('contact', 'add', '--name', 'Jane Doe', '--telegram', 't.me/janedoe')
+
+    const contacts = ctx.runJSON<Array<{ telegram: string }>>('contact', 'list', '--format', 'json')
+    expect(contacts[0].telegram).toBe('janedoe')
+  })
+
+  test('Telegram handle with @ prefix', () => {
+    const ctx = createTestContext()
+    ctx.runOK('contact', 'add', '--name', 'Jane Doe', '--telegram', '@janedoe')
+
+    const contacts = ctx.runJSON<Array<{ telegram: string }>>('contact', 'list', '--format', 'json')
+    expect(contacts[0].telegram).toBe('janedoe')
+  })
+
+  test('duplicate detected across URL formats without protocol', () => {
+    const ctx = createTestContext()
+    ctx.runOK('contact', 'add', '--name', 'Jane', '--x', 'janedoe')
+
+    // Same handle via bare URL — should reject
+    const result = ctx.runFail('contact', 'add', '--name', 'Bob', '--x', 'x.com/janedoe')
+    expect(result.stderr).toContain('duplicate')
+  })
+
+  test('duplicate detected via legacy twitter.com domain', () => {
+    const ctx = createTestContext()
+    ctx.runOK('contact', 'add', '--name', 'Jane', '--x', 'janedoe')
+
+    const result = ctx.runFail('contact', 'add', '--name', 'Bob', '--x', 'twitter.com/janedoe')
+    expect(result.stderr).toContain('duplicate')
+  })
+
+  test('duplicate detected via @ prefix', () => {
+    const ctx = createTestContext()
+    ctx.runOK('contact', 'add', '--name', 'Jane', '--telegram', 'janedoe')
+
+    const result = ctx.runFail('contact', 'add', '--name', 'Bob', '--telegram', '@janedoe')
+    expect(result.stderr).toContain('duplicate')
+  })
+
+  test('lookup by URL without protocol', () => {
+    const ctx = createTestContext()
+    ctx.runOK('contact', 'add', '--name', 'Jane Doe', '--x', 'janedoe')
+
+    const show = ctx.runOK('contact', 'show', 'x.com/janedoe')
+    expect(show).toContain('Jane Doe')
+  })
+
+  test('lookup by @ prefix', () => {
+    const ctx = createTestContext()
+    ctx.runOK('contact', 'add', '--name', 'Jane Doe', '--telegram', 'janedoe')
+
+    const show = ctx.runOK('contact', 'show', '@janedoe')
+    expect(show).toContain('Jane Doe')
+  })
+
   test('lookup by handle', () => {
     const ctx = createTestContext()
     ctx.runOK('contact', 'add', '--name', 'Jane Doe', '--linkedin', 'janedoe')
