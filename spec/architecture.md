@@ -1,216 +1,95 @@
-# Architecture
+# Architecture — Design Decisions
 
-## Design Principles
+## Spec-first methodology
 
-1. **Spec first, then implement.** The README is the interface spec. Functional tests are the behavioral contracts. Implementation = make tests green. This means all design decisions are made and documented before a single line of implementation code is written.
+We wrote 337 functional tests across 13 files before writing a single line of implementation code. This is unusual and intentional.
 
-2. **Every command is a cold start.** No daemon, no persistent process (except the FUSE mount). Each `crm` invocation opens the DB, runs the operation, and exits. This constrains the design: no connection pools, no in-memory caches, no background workers. But it also means the CLI is stateless and predictable.
+The reasoning: the README is the interface spec. Tests are the behavioral contracts. Implementation = make tests green. This means:
 
-3. **The filesystem is the API.** FUSE mount is the primary integration surface. Any tool that reads files has CRM access. The CLI is for writes and interactive use; the filesystem is for reads and automation.
+1. **Every design decision is made upfront.** You can't write a test for `crm deal move` without deciding how stage history works, whether to use activities or a JSON column, what the output format looks like. Tests force decisions.
+2. **Implementation is mechanical.** Once the tests exist, the implementer doesn't need to make design choices — they just need to make tests pass. This is especially powerful with CC (AI coding tools), which excels at "make this test green" but struggles with "decide how this should work."
+3. **The spec can't lie.** A README can describe behavior that doesn't exist. A passing test proves it works. Tests are executable documentation.
 
-4. **SQLite is the entire backend.** No Redis, no Postgres, no ElasticSearch. One `.db` file. This limits scale but eliminates ops. The target user has <5,000 contacts — SQLite handles that without breaking a sweat.
+The scope decision came from the eng review: 337 tests were already written across every feature (CRUD, normalization, search, reports, FUSE, hooks). The question was whether to cut scope and carry dead test files, or implement everything. We chose everything — the tests are written, implementation is mechanical, and carrying partially-implemented features is more complex than finishing them.
 
-5. **Normalization on write, not read.** Phone numbers are normalized to E.164 when entered, not when displayed. This means storage is canonical — lookups, dedup, and reports all work on normalized data without re-parsing.
+## Why functional tests, not unit tests
 
-## Stack
+Every test spawns the actual CLI binary via `Bun.spawnSync` and checks stdout/stderr/exit codes. No mocking, no importing internal modules, no test doubles.
 
-```
-┌─────────────────────────────────────────────────────┐
-│                    User / Agent                      │
-├──────────────┬──────────────────┬───────────────────┤
-│  CLI (Bun)   │   FUSE mount     │  Pipes / jq / etc │
-│  commander   │   (C binary)     │                   │
-├──────────────┴──────────────────┴───────────────────┤
-│                 Validation (Zod)                      │
-├─────────────────────────────────────────────────────┤
-│              Normalization Layer                      │
-│  libphonenumber-js │ normalize-url │ handle extract  │
-├─────────────────────────────────────────────────────┤
-│                 Drizzle ORM                           │
-├─────────────────────────────────────────────────────┤
-│                 libSQL (SQLite)                       │
-├─────────────────────────────────────────────────────┤
-│                 ~/.crm/crm.db                        │
-└─────────────────────────────────────────────────────┘
-```
+The reasoning:
 
-### Why Bun
+1. **Tests survive refactoring.** If we restructure `src/commands/contact.ts` into three files, unit tests break. Functional tests don't care about internal structure — they only care about CLI behavior.
+2. **Tests are the spec.** A functional test reads like documentation: "when I run `crm contact add --name Jane --email jane@acme.com`, the output should contain the new contact ID." Anyone can read this without knowing the codebase.
+3. **Tests catch integration bugs.** A unit test for phone normalization might pass, but the integration between normalization and storage might fail. Functional tests exercise the full stack.
+4. **Fresh state per test.** Each test creates a temp directory and fresh database. No shared state, no ordering dependencies, no cleanup. Tests can run in parallel (Bun's default).
 
-- **Single binary distribution.** `bun build --compile` produces a standalone executable. No Node.js runtime required on the user's machine.
-- **Fast startup.** Bun starts in ~25ms vs Node.js ~75ms. Matters because every command is a cold start.
-- **Native SQLite.** Bun includes SQLite natively (via `bun:sqlite`). We use libSQL for Drizzle compatibility, but the option exists.
-- **Test runner.** `bun test` is built in. No Jest, no Vitest, no config.
+The trade-off: functional tests are slower than unit tests (~25ms per test for Bun cold start). With 337 tests, that's ~8 seconds total. Acceptable.
 
-### Why libSQL + Drizzle (not bun:sqlite)
+## Why Bun, not Node.js
 
-Bun's native SQLite (`bun:sqlite`) is fast but doesn't integrate with Drizzle ORM. Drizzle provides:
+The original design was pure TypeScript. The Bun-specific reasoning:
 
-- Type-safe schema definition
-- Migration generation
-- Query builder that prevents SQL injection
-- Consistent API if we ever need to support remote databases (libSQL supports Turso)
+1. **`bun build --compile`** produces a standalone executable with the runtime embedded. Users don't need Node.js or Bun installed. This is the distribution story — a single binary, like Go or Rust, but written in TypeScript.
+2. **Cold start time.** Bun starts in ~25ms vs Node.js ~75ms. Every `crm` command is a cold start (no daemon), so this compounds. 50ms savings × thousands of daily commands adds up.
+3. **Built-in test runner.** `bun test` works with no config. No Jest, no Vitest, no babel/ts-jest/esbuild adapter chain.
+4. **Native SQLite.** Bun includes `bun:sqlite` natively. We use libSQL for Drizzle compatibility, but having a native SQLite option means we could drop the libSQL dependency later if needed.
 
-The overhead of libSQL over `bun:sqlite` is negligible for our workload.
+## Why libSQL + Drizzle, not bun:sqlite
 
-### Why commander (not custom arg parsing)
+Bun's native SQLite (`bun:sqlite`) is faster but doesn't integrate with Drizzle ORM. We chose Drizzle because:
 
-`commander` is the standard CLI framework for Node.js/Bun:
+1. **Type-safe schema definition.** The schema is defined in TypeScript, generates DDL, and provides TypeScript types. One source of truth for DB schema and type system.
+2. **Migration system.** `drizzle-kit` generates migration files. Schema changes are versioned and reviewable, not ad-hoc `ALTER TABLE` statements.
+3. **Query safety.** The query builder parameterizes inputs, preventing SQL injection. For a CLI that takes arbitrary user input (`--set`, `--filter`), this matters.
+4. **Escape hatch to Turso.** libSQL is wire-compatible with Turso's hosted SQLite. If someone ever wants cloud sync, the migration path exists without changing the ORM layer.
 
-- Handles subcommands, flags, help text, validation
-- Supports repeatable flags (`--email` multiple times)
-- Well-documented, stable, zero surprises
-- The alternative (custom `process.argv` parsing) is a maintenance burden for ~30 subcommands
+The overhead of libSQL over `bun:sqlite` is negligible at our query volume (a few queries per CLI invocation).
 
-### Why Zod
+## Why commander for CLI parsing
 
-Input validation layer between user input and the database:
+We need ~30 subcommands with repeatable flags, nested subcommands (e.g., `crm report pipeline`), help text generation, and flag validation. Building this from `process.argv` is a maintenance nightmare.
 
-- Validates flag values before they reach Drizzle
-- Validates JSON input for import and FUSE writes
-- Generates clear error messages (`"expected string, got number"`)
-- Type inference: Zod schemas generate TypeScript types, so the validator and the type system are always in sync
+`commander` is the standard answer: stable, well-documented, supports everything we need. The only alternative we considered was `yargs`, which has a similar feature set but heavier API surface. Commander's chainable API is a better fit for our subcommand structure.
 
-## Directory Structure (planned)
+The key feature: repeatable flags (`--email jane@acme.com --email jane@gmail.com`). Both commander and yargs support this; raw argv parsing doesn't.
 
-```
-crm.cli/
-├── src/
-│   ├── cli.ts              # Entry point. commander setup, subcommand routing
-│   ├── db/
-│   │   ├── schema.ts       # Drizzle schema (4 tables)
-│   │   ├── migrate.ts      # Migration runner
-│   │   └── connection.ts   # DB connection factory (open, close, WAL mode)
-│   ├── commands/
-│   │   ├── contact.ts      # contact add/list/show/edit/rm/merge
-│   │   ├── company.ts      # company add/list/show/edit/rm/merge
-│   │   ├── deal.ts         # deal add/list/show/edit/rm/move
-│   │   ├── activity.ts     # log, activity list
-│   │   ├── tag.ts          # tag, untag, tag list
-│   │   ├── search.ts       # search (FTS5), find (semantic), dupes
-│   │   ├── report.ts       # pipeline, activity, stale, conversion, velocity, forecast, won/lost
-│   │   ├── import-export.ts
-│   │   ├── pipeline.ts     # pipeline summary
-│   │   ├── mount.ts        # FUSE mount/unmount (spawns crm-fuse binary)
-│   │   ├── config.ts       # config resolution
-│   │   └── index.ts        # re-export all commands, search index rebuild
-│   ├── normalize/
-│   │   ├── phone.ts        # E.164 via libphonenumber-js
-│   │   ├── website.ts      # via normalize-url
-│   │   └── social.ts       # handle extraction (LinkedIn, X, Bluesky, Telegram)
-│   ├── format/
-│   │   ├── table.ts        # ASCII table formatter
-│   │   ├── json.ts         # JSON output
-│   │   └── csv.ts          # CSV/TSV output
-│   ├── hooks.ts            # Pre/post hook execution
-│   ├── fuse-helper.c       # FUSE3 filesystem implementation (compiled separately)
-│   └── search/
-│       ├── fts5.ts         # FTS5 index management
-│       └── semantic.ts     # ONNX embedding model (optional)
-├── spec/                   # This directory — design specs
-├── test/
-│   ├── helpers.ts          # createTestContext(), runOK(), runFail(), runJSON()
-│   ├── contact.test.ts     # 85 tests
-│   ├── company.test.ts     # 45 tests
-│   ├── deal.test.ts        # 39 tests
-│   ├── fuse.test.ts        # 61 tests
-│   ├── activity.test.ts    # 13 tests
-│   ├── search.test.ts      # 12 tests
-│   ├── report.test.ts      # 17 tests
-│   ├── config.test.ts      # 12 tests
-│   ├── import-export.test.ts # 19 tests
-│   ├── dupes.test.ts       # 13 tests
-│   ├── global.test.ts      # 9 tests
-│   ├── tag.test.ts         # 8 tests
-│   ├── hook.test.ts        # 4 tests
-│   └── fuse-smoke/         # FUSE3 smoke test (C binary + Bun runner)
-└── install.sh              # Platform-aware installer
-```
+## Why Zod for validation
 
-## Command Flow
+Zod sits between user input and the database. It validates flag values, import data, and FUSE write payloads.
 
-Every CLI command follows the same flow:
+The key reasoning: Zod schemas generate TypeScript types. We define the validation schema once, and the type system enforces it everywhere. No "validated at the boundary but typed as `any` internally" pattern.
 
-```
-1. Parse args (commander)
-2. Resolve config (crm.toml walk-up, env vars, flags)
-3. Open DB connection (libSQL, WAL mode, foreign keys ON)
-4. Run pre-hook (if configured)
-5. Validate input (Zod)
-6. Normalize input (phone/website/social)
-7. Execute operation (Drizzle query)
-8. Update FTS5 index (if write operation)
-9. Run post-hook (if configured)
-10. Format output (table/json/csv/tsv/ids)
-11. Print to stdout (data) or stderr (errors)
-12. Exit 0 (success) or 1 (error)
-```
+For FUSE writes specifically, Zod provides machine-readable error messages (`Missing required field: "name"`, `Invalid type for "emails": expected array, got string`) that map to FUSE errno values (EINVAL). This gives AI agents writing through the filesystem immediate, actionable feedback on validation failures.
 
-**Error handling:** Errors go to stderr. Data goes to stdout. Exit code 0 = success, 1 = user error (invalid input, not found), 2 = system error (DB locked, disk full). This follows Unix conventions and makes pipe-friendly error handling possible.
+## Two search strategies and why both exist
 
-## Config Resolution
+**`crm search` (FTS5):** SQLite's built-in full-text search. Keyword matching across all entity fields. Fast, zero dependencies, always available. Handles "find everyone at Acme" or "deals mentioning enterprise."
 
-Config is loaded from `crm.toml`. Resolution order (first match wins):
+**`crm find` (semantic):** Natural language search via local ONNX embeddings (`all-MiniLM-L6-v2`, ~80MB). Handles "that fintech CTO from London" or "deals we haven't touched in 2 weeks."
 
-```
-1. --config <path> flag
-2. CRM_CONFIG env var
-3. Walk up from CWD: ./crm.toml → ../crm.toml → ../../crm.toml → ... → /crm.toml
-4. ~/.crm/config.toml (global fallback)
-```
+Why both:
+- FTS5 is the baseline — it works on every machine, adds no dependencies, and covers exact/keyword matching perfectly. Most searches are keyword searches.
+- Semantic search handles the long tail — queries where the user doesn't remember the exact terms. But it requires ONNX runtime (~50MB dependency) and the embedding model (~80MB download).
+- We made semantic search *optional* and *degradable*. `crm find` falls back to FTS5 if ONNX is unavailable. The install script's `--minimal` flag skips ONNX entirely.
 
-This mirrors `.gitignore`, `tsconfig.json`, and other config-walk patterns. A project-level `crm.toml` overrides global config, so teams can share pipeline stages and defaults.
+**Why local, not API:** The target user is a developer who cares about privacy and offline capability. CRM data is sensitive — contact details, deal values, meeting notes. Sending it to an embedding API is a non-starter for many users. Local inference means no API keys, no network calls, no data leaving the machine.
 
-## Search Architecture
+**Why ONNX was accepted as a dependency:** We debated whether an 80MB model download was too heavy for a CLI tool. The decision: it's optional, downloads lazily on first use, and caches locally. Users who don't want it never see it. Users who do want it get surprisingly good results from MiniLM for zero configuration.
 
-### FTS5 (keyword search)
+## Concurrency model
 
-SQLite's built-in full-text search. A virtual table (`crm_fts`) indexes:
+No daemon (except the FUSE mount). Every CLI command is a stateless process. The concurrency questions:
 
-- Contact: name, emails, phones, companies, tags, custom field values
-- Company: name, websites, phones, tags, custom field values
-- Deal: title, stage, tags, custom field values
-- Activity: body, type
+**CLI + FUSE:** The FUSE helper opens the DB read-only. The CLI opens read-write. SQLite WAL mode supports concurrent readers + one writer. The FUSE helper queries on every read (no cache), so CLI writes are reflected on the next FUSE read with no invalidation needed.
 
-Index updates happen synchronously on every write. `crm index rebuild` rebuilds from scratch.
+**Multiple CLI processes:** Two terminals can run `crm` simultaneously. SQLite WAL handles concurrent writes with a lock — the second writer waits (default 5s timeout), then fails with "database locked" if it can't acquire. This is acceptable because the target user is one person running commands sequentially, not a web server handling concurrent requests.
 
-### Semantic search (optional)
+**Why no daemon for the CLI:** A persistent daemon could provide warm caches, connection pooling, and faster startup. But it adds complexity (process management, IPC, crash recovery) for marginal benefit. At <5K records, SQLite queries are <1ms cold. The FUSE mount is the only feature that requires a persistent process, and it's a separate binary with a simple lifecycle.
 
-`crm find` uses a local ONNX embedding model (`all-MiniLM-L6-v2`, ~80MB). The model downloads on first use and caches at `~/.crm/models/`.
+## Error model
 
-Embedding workflow:
-1. On write: generate embedding vector for the entity's text representation
-2. Store vector in a separate table (`embeddings`)
-3. On search: embed the query, compute cosine similarity against all vectors
-4. Return top-K results above threshold
+**stdout = data, stderr = errors.** This is a Unix convention, but it matters: `crm contact list --format json | jq '...'` works because errors don't pollute the JSON stream.
 
-**Dependency:** `onnxruntime-node` (~50MB). Optional — `crm find` falls back to FTS5 keyword search if ONNX is unavailable. The install script's `--all` flag includes ONNX; `--minimal` skips it.
+**Exit codes:** 0 = success, non-zero = error. We considered distinguishing user errors (invalid input, not found) from system errors (DB locked, disk full) with different exit codes (1 vs 2), but decided to keep it simple for v0.1. A non-zero exit code means something went wrong — the stderr message explains what.
 
-**Why local, not API:** No API keys, no network calls, no data leaving the machine. The target user is a developer who cares about privacy and offline capability.
-
-## Distribution
-
-### Three install paths
-
-1. **npm/bun global install:** `bun install -g crm.cli` or `npm install -g crm.cli`. The `bin` field in `package.json` points to `src/cli.ts`, which Bun runs directly.
-
-2. **Compiled binary:** `bun build --compile` produces a standalone executable for each platform. Distributed via GitHub Releases. No runtime dependency (Bun is embedded in the binary).
-
-3. **Install script:** `install.sh` detects platform, downloads the correct binary, installs to `~/.local/bin`. Options:
-   - `--all`: installs binary + FUSE helper + ONNX runtime
-   - `--minimal`: binary only (no FUSE, no semantic search)
-
-### FUSE helper distribution
-
-The FUSE helper (`crm-fuse`) is a separate C binary. It's not bundled inside the Bun-compiled executable — it's distributed alongside it.
-
-- **GitHub Releases:** Pre-compiled `crm-fuse` for each platform (linux-x64, linux-arm64, darwin-x64, darwin-arm64)
-- **Install script:** Downloads and installs both `crm` and `crm-fuse`
-- **From source:** `make fuse` compiles `src/fuse-helper.c` against the system's libfuse3
-
-If `crm-fuse` is missing, `crm mount` prints platform-specific install instructions and exits with an error. All other CLI commands work without it.
-
-## Concurrency Model
-
-- **CLI operations:** Single-threaded, synchronous. One command at a time. SQLite's WAL mode handles concurrent readers.
-- **FUSE reads + CLI writes:** The FUSE helper opens the DB read-only. The CLI opens read-write. WAL mode allows this concurrently. The FUSE helper queries on every read (no cache), so CLI writes are reflected immediately on the next FUSE read.
-- **Multiple CLIs:** Two terminal sessions can run `crm` simultaneously. SQLite WAL handles concurrent writes with a brief lock wait (default 5s timeout). If the lock times out, the second writer gets "database locked" error.
+**Error messages go to stderr, not stdout.** This seems obvious but it's the single most important decision for pipe-friendliness. `crm contact add --phone "not-a-number"` should write the error to stderr and exit 1, not print an error to stdout that downstream tools would try to parse as data.

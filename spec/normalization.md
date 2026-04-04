@@ -1,210 +1,71 @@
-# Normalization Contracts
+# Normalization — Design Decisions
 
-## Philosophy
+## The Three Tiers
 
-crm.cli normalizes input data on write so that lookups, deduplication, and display work consistently regardless of how the user typed it. This is the structured intelligence that justifies using a CRM over a spreadsheet.
+Data normalization is what justifies crm.cli over a spreadsheet. A CSV stores whatever you type. crm.cli normalizes on write so that lookups, deduplication, and display work regardless of how data was entered.
 
-Three normalization tiers:
+We landed on three normalization tiers with different strictness levels:
 
-| Tier | Fields | Library | Invalid input |
-|------|--------|---------|---------------|
-| **Strict** | Phone numbers | libphonenumber-js | Reject with error |
-| **Permissive** | Websites | normalize-url | Store as-is if normalization fails |
-| **Extract** | Social handles | Custom regex | Store as-is if no pattern matches |
+| Tier | Fields | On invalid input |
+|------|--------|------------------|
+| **Strict** | Phone numbers | Reject with error |
+| **Permissive** | Websites | Store as-is |
+| **Extract** | Social handles | Store as-is |
 
-The rule: phones are strict because a wrong E.164 value corrupts lookups permanently. Websites and handles are permissive because storing a weird URL is better than rejecting potentially valid input.
+The reasoning behind each tier's strictness:
 
-## Phone Normalization
+**Phones are strict** because a wrong E.164 value corrupts lookups permanently. If `+1234` gets stored instead of `+12125551234`, every future lookup for that contact by phone fails silently. The cost of a false rejection (user re-enters the number correctly) is low. The cost of a false acceptance (corrupted data) is high.
 
-### Library
+**Websites are permissive** because URL formats are surprisingly diverse. IP addresses, ports, unusual TLDs, IDN domains — rejecting anything `normalize-url` can't parse would block legitimate input. Storing a weird URL as-is is better than refusing it. The cost of false acceptance (a slightly non-canonical URL) is just a missed dedup opportunity. The cost of false rejection (user can't add their company) is losing data.
 
-[libphonenumber-js](https://gitlab.com/nicolo-ribaudo/libphonenumber-js) — Google's libphonenumber ported to JavaScript. Battle-tested, handles edge cases across all country formats.
+**Social handles are extract-best-effort** because users will paste LinkedIn URLs instead of typing handles. We should handle that gracefully. But if someone types something we don't recognize as a URL pattern, it's probably a handle — store it. The extraction is a convenience, not a gate.
 
-### Behavior
+## Why E.164, not "just store what they type"
 
-**Storage format:** E.164 (`+12125551234`). Always. No exceptions.
+We considered storing phone numbers as entered and normalizing at query time. Rejected because:
 
-**Input parsing:** Any reasonable format is accepted:
+1. **Dedup breaks.** `+1-212-555-1234` and `(212) 555-1234` look different but are the same number. Without canonical storage, duplicate detection requires normalizing every phone on every comparison.
+2. **Lookup breaks.** `crm contact show "212-555-1234"` needs to find a contact stored as `+1 (212) 555-1234`. Normalizing at query time means normalizing the query AND every stored value.
+3. **Export breaks.** Exporting to CSV and re-importing would create duplicates if the formats don't match exactly.
 
-| Input | Stored as | Notes |
-|-------|-----------|-------|
-| `+1-212-555-1234` | `+12125551234` | International with dashes |
-| `(212) 555-1234` | `+12125551234` | National (requires `default_country`) |
-| `2125551234` | `+12125551234` | Digits only (requires `default_country`) |
-| `+12125551234` | `+12125551234` | Already E.164 |
-| `+44 20 7946 0958` | `+442079460958` | UK number |
-| `020 7946 0958` | `+442079460958` | UK national (with `default_country = "GB"`) |
+E.164 (`+12125551234`) is the canonical format that every phone library can parse. We normalize once on write, and everything downstream — lookups, dedup, display, FUSE filenames — works from the canonical value.
 
-**Validation rules:**
-- Must be a valid phone number per libphonenumber-js `isValidNumber()`
-- Must have enough digits for the country
-- Country code required unless `phone.default_country` is set in config
-- Invalid numbers → error exit (non-zero), stderr message: `error: invalid phone number "<input>"`
+**Library choice:** libphonenumber-js (Google's libphonenumber ported to JS). It's the industry standard, handles every country format, and provides `isValidNumber()` for strict validation. We considered `awesome-phonenumber` but it's a wrapper around the same Google library with extra weight.
 
-**Config:**
+## Why website normalization strips protocol but preserves path
 
-```toml
-[phone]
-default_country = "US"           # ISO 3166-1 alpha-2
-display = "international"        # international | national | e164
-```
+The decision: `https://www.ACME.COM/Labs` → `acme.com/labs`. Protocol and `www.` are stripped; path is preserved.
 
-**Display formats:**
+**Why strip protocol:** `http://acme.com` and `https://acme.com` are the same company. Storing the protocol creates false negatives in dedup.
 
-| Setting | Output for +12125551234 |
-|---------|------------------------|
-| `international` | `+1 212 555 1234` |
-| `national` | `(212) 555-1234` |
-| `e164` | `+12125551234` |
+**Why strip www:** `www.acme.com` and `acme.com` are almost always the same site. Same reasoning as protocol.
 
-Display format only affects `show` and `list` output. Storage is always E.164. JSON output (`--format json`) always uses E.164.
+**Why preserve path:** `globex.com/research` and `globex.com/consulting` could be different divisions of the same company — different enough to be separate company records. Path-based companies are real (especially in enterprise). Stripping paths would merge them incorrectly.
 
-**Lookup:** Any format resolves to E.164 before querying:
+**Why lowercase host but not path:** Hosts are case-insensitive per RFC. Paths can be case-sensitive (some servers distinguish `/About` from `/about`). We lowercase the host for canonical comparison but preserve path case. In practice this rarely matters, but it's the correct behavior.
 
-```bash
-crm contact show "+12125551234"      # E.164
-crm contact show "(212) 555-1234"    # national → E.164 → lookup
-crm contact show "212-555-1234"      # partial → E.164 → lookup
-# All three find the same contact
-```
+**Why permissive on failure:** `normalize-url` throws on truly bizarre input. Rather than rejecting, we store the raw input. The user presumably knows their company's URL better than our normalizer.
 
-**Deduplication:** Adding a phone that normalizes to an E.164 already in the database is rejected as a duplicate.
+## Why four hard-coded social platforms, not an extensible `socials` JSON
 
-### Edge cases (covered by tests)
+We hard-code LinkedIn, X, Bluesky, and Telegram as dedicated columns. We considered a generic `socials JSON` field (key-value of platform → handle) and rejected it.
 
-- Numbers without country code and no `default_country` config → error
-- Numbers with too few digits → error
-- Numbers with letters → error
-- Toll-free numbers (e.g., `+1-800-555-1234`) → valid, normalized
-- Numbers with extensions → stripped (extensions not stored in v0.1)
-- Leading/trailing whitespace → stripped before parsing
+**The UNIQUE constraint argument:** SQLite enforces `UNIQUE` on columns, not on JSON keys. With a `socials JSON` field, two contacts could have the same LinkedIn handle and the DB wouldn't catch it. We'd need application-level uniqueness checks, which are race-condition-prone.
 
-## Website Normalization
+**The FUSE argument:** Each platform gets a `_by-linkedin/`, `_by-x/`, etc. directory in the FUSE mount. These are defined by the schema, not dynamically. A generic `socials` field would need a dynamic directory generator — more complex for marginal benefit.
 
-### Library
+**The URL extraction argument:** Each platform has a specific URL format (`linkedin.com/in/<handle>`, `x.com/<handle>`, `bsky.app/profile/<handle>`, `t.me/<handle>`). A generic system would need a config-driven pattern registry. For 4 platforms, that's over-engineering. For 40 platforms, it would be justified. We're at 4.
 
-[normalize-url](https://github.com/sindresorhus/normalize-url) — well-maintained, covers the common normalization cases.
+**The coverage argument:** These four cover professional networking. If someone needs GitHub or Mastodon, `--set github=octocat` works fine as a custom field. The only thing they lose is UNIQUE enforcement, URL extraction, and a FUSE index — which are "nice to have" for a fifth platform, not essential.
 
-### Behavior
+Adding a fifth platform is: schema migration + new URL extraction regex + new FUSE `_by-*` directory + update tests. Straightforward but deliberate — you don't accidentally add social platforms.
 
-**Storage format:** Lowercase host, no protocol, no `www.`, preserved path, no trailing slash (unless path is non-empty).
+## Why handles are stored, not URLs
 
-| Input | Stored as |
-|-------|-----------|
-| `https://www.Acme.com` | `acme.com` |
-| `http://acme.com/` | `acme.com` |
-| `HTTPS://WWW.ACME.COM/Labs` | `acme.com/labs` |
-| `acme.com/labs/` | `acme.com/labs` |
-| `acme.com` | `acme.com` |
-| `https://us.acme.com` | `us.acme.com` |
-| `http://acme.co.uk` | `acme.co.uk` |
+`https://linkedin.com/in/janedoe` is stored as `janedoe`.
 
-**Normalization rules:**
-1. Strip protocol (`http://`, `https://`)
-2. Strip `www.` prefix
-3. Lowercase the entire host
-4. Preserve the path (case-sensitive — paths can be case-sensitive on servers)
-5. Strip trailing slash only when path is `/` (root)
-6. Strip query string and fragment
+The reasoning: handles are the canonical identifier. URLs vary (`linkedin.com/in/janedoe`, `www.linkedin.com/in/janedoe/`, `https://linkedin.com/in/janedoe?locale=en_US`). The handle `janedoe` is stable across all URL variants.
 
-**Invalid input:** If `normalize-url` throws, store the input as-is. This is the permissive tier — we'd rather store `not-a-url.example` than reject it.
+Storing the handle means: (a) UNIQUE constraint works on a single canonical value, (b) display is clean (`janedoe` not a full URL), (c) we can reconstruct the URL from the handle if needed (the URL pattern is known per platform), (d) lookup works regardless of input format — `crm contact show linkedin.com/in/janedoe` extracts the handle and matches against the stored value.
 
-**Uniqueness:**
-- Same normalized website on two different companies → rejected as duplicate
-- Different paths are distinct: `globex.com/research` ≠ `globex.com/consulting`
-- Different subdomains are distinct: `us.acme.com` ≠ `eu.acme.com`
-- `www.` is stripped, so `www.acme.com` = `acme.com`
-
-**Lookup:** Input is normalized before querying. `crm company show "HTTPS://WWW.ACME.COM"` finds the company stored as `acme.com`.
-
-### Edge cases (covered by tests)
-
-- Protocol-only input (`https://`) → stored as-is (normalization fails gracefully)
-- IP addresses (`192.168.1.1`) → stored as-is
-- Ports (`acme.com:8080`) → preserved
-- Unicode domains (IDN) → stored as-is (no punycode conversion in v0.1)
-- Multiple consecutive slashes in path → collapsed
-- Query strings → stripped
-- Fragments (`#section`) → stripped
-- Data URIs, `javascript:` → stored as-is (permissive)
-- Empty string → error (website is a non-empty field when provided)
-
-## Social Handle Normalization
-
-### Platforms
-
-Four hard-coded social platforms with handle fields on contacts:
-
-| Platform | Column | Example handle |
-|----------|--------|---------------|
-| LinkedIn | `linkedin` | `janedoe` |
-| X / Twitter | `x` | `janedoe` |
-| Bluesky | `bluesky` | `janedoe.bsky.social` |
-| Telegram | `telegram` | `janedoe` |
-
-### Behavior
-
-**Storage format:** Handle only. Never a URL, never an `@` prefix.
-
-**Input parsing:** Accept any of these formats and extract the handle:
-
-| Input | Platform | Stored as |
-|-------|----------|-----------|
-| `janedoe` | Any | `janedoe` |
-| `@janedoe` | Any | `janedoe` |
-| `https://linkedin.com/in/janedoe` | LinkedIn | `janedoe` |
-| `linkedin.com/in/janedoe` | LinkedIn | `janedoe` |
-| `www.linkedin.com/in/janedoe` | LinkedIn | `janedoe` |
-| `https://linkedin.com/in/janedoe/` | LinkedIn | `janedoe` |
-| `x.com/janedoe` | X | `janedoe` |
-| `twitter.com/janedoe` | X | `janedoe` |
-| `https://x.com/janedoe` | X | `janedoe` |
-| `bsky.app/profile/user.bsky.social` | Bluesky | `user.bsky.social` |
-| `https://bsky.app/profile/user.bsky.social` | Bluesky | `user.bsky.social` |
-| `t.me/janedoe` | Bluesky | `janedoe` |
-| `https://t.me/janedoe` | Telegram | `janedoe` |
-
-**Extraction rules per platform:**
-
-```
-LinkedIn:
-  URL pattern: linkedin.com/in/<handle>[/...]
-  Strip: protocol, www., /in/ prefix, trailing slash
-  Result: <handle>
-
-X / Twitter:
-  URL pattern: (x.com|twitter.com)/<handle>[/...]
-  Strip: protocol, www., domain, trailing slash
-  Result: <handle>
-
-Bluesky:
-  URL pattern: bsky.app/profile/<handle>[/...]
-  Strip: protocol, www., /profile/ prefix, trailing slash
-  Result: <handle> (includes .bsky.social)
-
-Telegram:
-  URL pattern: t.me/<handle>[/...]
-  Strip: protocol, www., domain, trailing slash
-  Result: <handle>
-
-All platforms:
-  If input starts with @, strip the @
-  If no URL pattern matches, store as-is (permissive)
-```
-
-**Uniqueness:** Each platform's handle column is `UNIQUE` in the schema. No two contacts can have the same LinkedIn handle, the same X handle, etc. Cross-platform duplicates are fine (same handle on LinkedIn and X).
-
-**Lookup:** `crm contact show janedoe` matches against all four social handle columns. `crm contact show linkedin.com/in/janedoe` extracts the handle first, then matches. This means URL input works for lookups too.
-
-**Duplicate detection:** The `crm dupes` command flags contacts with similar handles across platforms as potential duplicates (e.g., `janedoe` on LinkedIn and `janetdoe` on X for two different contacts).
-
-### Why hard-coded, not extensible
-
-Four platforms are hard-coded as columns, not stored in a generic `socials JSON` field. Reasons:
-
-1. **UNIQUE constraints.** SQLite can enforce uniqueness on columns, not on JSON keys.
-2. **FUSE indexes.** Each platform gets a `_by-linkedin/`, `_by-x/`, etc. directory. These are defined at the schema level, not dynamically.
-3. **URL extraction patterns.** Each platform has a specific URL format. A generic system would need a config-driven pattern registry — over-engineering for 4 platforms.
-4. **These four cover 95% of professional networking.** If someone needs GitHub, Mastodon, or Instagram handles, they go in `custom_fields` via `--set github=octocat`.
-
-Adding a fifth platform (e.g., GitHub) is a schema migration + new URL parser + new FUSE index. Straightforward but deliberate — you don't accidentally add social platforms.
+The extraction is best-effort: if we can't parse the input as a URL, we strip any leading `@` and store as-is. This handles edge cases like someone typing `@janedoe` or just `janedoe` directly.
