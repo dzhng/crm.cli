@@ -15,7 +15,7 @@ describe('company add', () => {
       .runOK(
         'company', 'add',
         '--name', 'Acme Corp',
-        '--website', 'acme.com',
+        '--website', 'acme.com/about',
         '--tag', 'enterprise',
         '--set', 'industry=SaaS',
         '--set', 'size=50-200',
@@ -62,7 +62,7 @@ describe('company add', () => {
     expect(show).toContain('+44 20 7946 0958')
   })
 
-  test('lookup by any domain when company has multiple', () => {
+  test('lookup by any website when company has multiple', () => {
     const ctx = createTestContext()
     ctx.runOK(
       'company', 'add', '--name', 'Acme Corp',
@@ -77,7 +77,7 @@ describe('company add', () => {
 })
 
 describe('company show', () => {
-  test('by domain', () => {
+  test('by website', () => {
     const ctx = createTestContext()
     ctx.runOK('company', 'add', '--name', 'Acme Corp', '--website', 'acme.com')
     const out = ctx.runOK('company', 'show', 'acme.com')
@@ -91,7 +91,7 @@ describe('company show', () => {
     expect(out).toContain('Acme Corp')
   })
 
-  test('company with phone but no domain is lookupable by phone', () => {
+  test('company with phone but no website is lookupable by phone', () => {
     const ctx = createTestContext()
     ctx.runOK('company', 'add', '--name', 'Phone Only Corp', '--phone', '+44-20-7946-0958')
     const out = ctx.runOK('company', 'show', '+442079460958')
@@ -240,7 +240,7 @@ describe('company website normalization', () => {
     const ctx = createTestContext()
     ctx.runOK('company', 'add', '--name', 'Acme Corp', '--website', 'acme.com')
 
-    const result = ctx.runFail('company', 'add', '--name', 'Acme Inc', '--website', 'www.acme.com')
+    const result = ctx.runFail('company', 'add', '--name', 'Acme Inc', '--website', 'www.acme.com/about')
     expect(result.stderr).toContain('duplicate')
   })
 
@@ -262,7 +262,7 @@ describe('company website normalization', () => {
     expect(companies).toHaveLength(2)
   })
 
-  test('root domain and subdomain are NOT duplicates', () => {
+  test('different paths are NOT duplicates', () => {
     const ctx = createTestContext()
     ctx.runOK('company', 'add', '--name', 'Acme Global', '--website', 'acme.com')
     ctx.runOK('company', 'add', '--name', 'Acme Blog', '--website', 'blog.acme.com')

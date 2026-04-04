@@ -15,8 +15,8 @@ describe('dupes', () => {
 
   test('finds likely duplicate companies by fuzzy name', () => {
     const ctx = createTestContext()
-    ctx.runOK('company', 'add', '--name', 'Acme', '--website', 'https://acme.com')
-    ctx.runOK('company', 'add', '--name', 'Acme Inc', '--website', 'https://acme.ai')
+    ctx.runOK('company', 'add', '--name', 'Acme', '--website', 'acme.com')
+    ctx.runOK('company', 'add', '--name', 'Acme Inc', '--website', 'acme.ai')
 
     const out = ctx.runOK('dupes', '--type', 'company')
     expect(out).toContain('Acme')
@@ -47,8 +47,8 @@ describe('dupes', () => {
 
   test('finds likely duplicate companies by similar website hosts even with paths', () => {
     const ctx = createTestContext()
-    ctx.runOK('company', 'add', '--name', 'Example Docs', '--website', 'https://example.com/a')
-    ctx.runOK('company', 'add', '--name', 'Example Docs Inc', '--website', 'https://example.com/b')
+    ctx.runOK('company', 'add', '--name', 'Example Docs', '--website', 'example.com/a')
+    ctx.runOK('company', 'add', '--name', 'Example Docs Inc', '--website', 'example.com/b')
 
     const out = ctx.runOK('dupes', '--type', 'company')
     expect(out).toContain('Example Docs')

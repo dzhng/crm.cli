@@ -228,7 +228,7 @@ crm company show co_01J8Z...
 crm company show "+1-212-555-1234"
 ```
 
-Accepts ID, any stored website value, or any phone number. Shows company details plus all linked contacts and deals.
+Accepts ID, any stored website, or any phone number. Shows company details plus all linked contacts and deals.
 
 #### `crm company edit <id-or-website-or-phone>`
 
@@ -754,15 +754,15 @@ display = "international"
 
 ## Website Normalization
 
-Websites are stored as full URLs. Input is normalized for consistent storage and lookup while preserving the path when present.
+Company websites are stored as full URLs.
 
-Normalization rules:
+Input is normalized for consistent storage and lookup:
 
-- Strip protocol if provided
-- Strip `www.` prefix
-- Lowercase the host
-- Preserve the path
-- Strip trailing slash only when the path is otherwise empty
+- strip protocol if provided
+- strip `www.` prefix
+- lowercase the host
+- preserve the path
+- drop the trailing slash only when there is no path
 
 ```bash
 crm company add --name "Acme" --website "https://www.Acme.com/about"
@@ -776,14 +776,28 @@ crm company add --name "Example Docs" --website "example.com/a"
 crm company add --name "Example Pricing" --website "example.com/b"
 ```
 
-**Dedup:** Exact match after normalization = duplicate. The same normalized website value cannot belong to two different companies:
+**Dedup:** exact match after normalization is a duplicate. The same normalized website cannot belong to two different companies:
 
 ```bash
 crm company add --name "Acme Corp" --website "acme.com/about"
 crm company add --name "Acme Inc" --website "www.acme.com/about"    # fails: duplicate website
 ```
 
-**Lookup:** Equivalent input formats resolve to the same normalized website value:
+**Different paths are distinct:**
+
+```bash
+crm company add --name "Example Docs" --website "example.com/a"
+crm company add --name "Example Pricing" --website "example.com/b"   # allowed — different path
+```
+
+**Subdomains are distinct:**
+
+```bash
+crm company add --name "Acme US" --website "us.acme.com"
+crm company add --name "Acme EU" --website "eu.acme.com"            # allowed — different subdomain
+```
+
+**Lookup:** equivalent input formats resolve to the same normalized website:
 
 ```bash
 crm company show "https://www.acme.com/about"
