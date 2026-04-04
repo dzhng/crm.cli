@@ -4,6 +4,7 @@ import { resolveContact, resolveCompanyForLink, resolveDeal } from '../resolve'
 import { formatOutput, dealToRow, safeJSON } from '../format'
 import { upsertSearchIndex, removeSearchIndex } from '../db'
 import { runHook } from '../hooks'
+import { dealAddSchema, dealEditSchema, formatZodError } from '../schema'
 
 export function registerDealCommands(program: Command) {
   const cmd = program.command('deal').description('Manage deals')
@@ -20,41 +21,46 @@ export function registerDealCommands(program: Command) {
     .option('--set <kv>', 'Custom field', collect, [])
     .action((opts) => {
       const { db, config } = getCtx()
+
+      // Validate and transform inputs via Zod
+      const parsed = dealAddSchema(config.pipeline.stages).safeParse(opts)
+      if (!parsed.success) {
+        const firstIssue = parsed.error.issues[0]
+        const path = firstIssue.path[0] as string
+        // Preserve existing error message patterns
+        if (path === 'value') die('Error: value must be non-negative')
+        if (path === 'probability') die('Error: probability must be between 0 and 100')
+        if (path === 'expectedClose') die('Error: invalid expected-close date')
+        if (path === 'stage') die(`Error: invalid stage "${opts.stage}"`)
+        die(`Error: ${formatZodError(parsed.error)}`)
+      }
+      const data = parsed.data
+
       const id = makeId('dl')
       const n = now()
-      if (opts.value !== undefined && Number(opts.value) < 0) die('Error: value must be non-negative')
-      if (opts.probability !== undefined) {
-        const prob = Number(opts.probability)
-        if (prob < 0 || prob > 100) die('Error: probability must be between 0 and 100')
-      }
-      if (opts.expectedClose) {
-        const d = new Date(opts.expectedClose)
-        if (isNaN(d.getTime())) die('Error: invalid expected-close date')
-      }
-      const stage = opts.stage || config.pipeline.stages[0]
-      if (!config.pipeline.stages.includes(stage)) die(`Error: invalid stage "${stage}"`)
+      const stage = data.stage || config.pipeline.stages[0]
       const contactIds: string[] = []
-      for (const ref of opts.contact) {
+      for (const ref of data.contact) {
         const ct = resolveContact(db, ref, config)
         if (!ct) die(`Error: contact not found: ${ref}`)
         contactIds.push(ct.id)
       }
       let companyId: string | null = null
-      if (opts.company) {
-        const co = resolveCompanyForLink(db, opts.company, config)
+      if (data.company) {
+        const co = resolveCompanyForLink(db, data.company, config)
         if (co) {
           companyId = co.id
         } else {
           // Auto-create only for plain names (no dots suggesting domain)
-          if (opts.company.includes('.')) die(`Error: company not found: ${opts.company}`)
-          companyId = getOrCreateCompanyId(db, opts.company, config)
+          if (data.company.includes('.')) die(`Error: company not found: ${data.company}`)
+          companyId = getOrCreateCompanyId(db, data.company, config)
         }
       }
-      const custom = parseKV(opts.set)
-      const value = opts.value !== undefined ? Number(opts.value) : null
-      const probability = opts.probability !== undefined ? Number(opts.probability) : null
+      const custom = parseKV(data.set)
+      const value = data.value !== undefined ? data.value : null
+      const probability = data.probability !== undefined ? data.probability : null
       db.run('INSERT INTO deals (id,title,value,stage,contacts,company,expected_close,probability,tags,custom_fields,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
-        [id, opts.title, value, stage, JSON.stringify(contactIds), companyId, opts.expectedClose || null, probability, JSON.stringify(opts.tag), JSON.stringify(custom), n, n])
+        [id, data.title, value, stage, JSON.stringify(contactIds), companyId, data.expectedClose || null, probability, JSON.stringify(data.tag), JSON.stringify(custom), n, n])
       const row = db.query('SELECT * FROM deals WHERE id = ?').get(id)
       upsertSearchIndex(db, 'deal', id, buildDealSearch(row))
       console.log(id)
@@ -109,25 +115,31 @@ export function registerDealCommands(program: Command) {
       const { db, config } = getCtx()
       const d = resolveDeal(db, ref)
       if (!d) die(`Error: deal not found: ${ref}`)
-      const title = opts.title ?? d.title
-      const value = opts.value !== undefined ? Number(opts.value) : d.value
+
+      // Validate edit inputs via Zod
+      const parsed = dealEditSchema.safeParse(opts)
+      if (!parsed.success) die(`Error: ${formatZodError(parsed.error)}`)
+      const data = parsed.data
+
+      const title = data.title ?? d.title
+      const value = data.value !== undefined ? data.value : d.value
       let contacts: string[] = safeJSON(d.contacts)
       let tags: string[] = safeJSON(d.tags)
       let custom: Record<string, any> = safeJSON(d.custom_fields)
-      for (const r of opts.addContact) {
+      for (const r of data.addContact) {
         const ct = resolveContact(db, r, config)
         if (!ct) die(`Error: contact not found: ${r}`)
         if (!contacts.includes(ct.id)) contacts.push(ct.id)
       }
-      for (const r of opts.rmContact) {
+      for (const r of data.rmContact) {
         const ct = resolveContact(db, r, config)
         if (ct) contacts = contacts.filter(id => id !== ct.id)
       }
-      for (const t of opts.addTag) { if (!tags.includes(t)) tags.push(t) }
-      for (const t of opts.rmTag) tags = tags.filter(v => v !== t)
-      const kvs = parseKV(opts.set)
+      for (const t of data.addTag) { if (!tags.includes(t)) tags.push(t) }
+      for (const t of data.rmTag) tags = tags.filter(v => v !== t)
+      const kvs = parseKV(data.set)
       for (const [k, v] of Object.entries(kvs)) custom[k] = v
-      for (const k of opts.unset) delete custom[k]
+      for (const k of data.unset) delete custom[k]
       db.run('UPDATE deals SET title=?,value=?,contacts=?,tags=?,custom_fields=?,updated_at=? WHERE id=?',
         [title, value, JSON.stringify(contacts), JSON.stringify(tags), JSON.stringify(custom), now(), d.id])
       const row = db.query('SELECT * FROM deals WHERE id = ?').get(d.id)

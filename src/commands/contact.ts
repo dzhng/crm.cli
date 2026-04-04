@@ -7,6 +7,7 @@ import { resolveContact } from '../resolve'
 import { upsertSearchIndex, removeSearchIndex } from '../db'
 import { parseFilter, applyFilter } from '../filter'
 import { runHook } from '../hooks'
+import { contactAddSchema, contactEditSchema, formatZodError } from '../schema'
 
 export function registerContactCommands(program: Command) {
   const cmd = program.command('contact').description('Manage contacts')
@@ -24,34 +25,43 @@ export function registerContactCommands(program: Command) {
     .option('--set <kv>', 'Custom field', collect, [])
     .action((opts) => {
       const { db, config } = getCtx()
+
+      // Validate and transform inputs via Zod
+      const parsed = contactAddSchema(config.phone.default_country).safeParse(opts)
+      if (!parsed.success) {
+        const firstIssue = parsed.error.issues[0]
+        // Preserve existing error message patterns for phone validation
+        if (firstIssue.path[0] === 'phone') {
+          die(`Error: invalid phone — ${firstIssue.message}`)
+        }
+        die(`Error: ${formatZodError(parsed.error)}`)
+      }
+      const data = parsed.data
+
       const cid = makeId('ct')
       const n = now()
-      for (const e of opts.email) checkDupeEmail(db, e)
-      const phones: string[] = []
-      for (const p of opts.phone) {
-        try {
-          const norm = normalizePhone(p, config.phone.default_country)
-          checkDupePhone(db, norm, 'contacts')
-          phones.push(norm)
-        } catch (e: any) { die(`Error: invalid phone — ${e.message}`) }
+      for (const e of data.email) checkDupeEmail(db, e)
+      const phones = data.phone
+      for (const norm of phones) {
+        checkDupePhone(db, norm, 'contacts')
       }
-      const linkedin = opts.linkedin ? normalizeSocialHandle('linkedin', opts.linkedin) : null
-      const x = opts.x ? normalizeSocialHandle('x', opts.x) : null
-      const bluesky = opts.bluesky ? normalizeSocialHandle('bluesky', opts.bluesky) : null
-      const telegram = opts.telegram ? normalizeSocialHandle('telegram', opts.telegram) : null
+      const linkedin = data.linkedin ?? null
+      const x = data.x ?? null
+      const bluesky = data.bluesky ?? null
+      const telegram = data.telegram ?? null
       if (linkedin) checkDupeSocial(db, 'linkedin', linkedin)
       if (x) checkDupeSocial(db, 'x', x)
       if (bluesky) checkDupeSocial(db, 'bluesky', bluesky)
       if (telegram) checkDupeSocial(db, 'telegram', telegram)
       const companies: string[] = []
-      for (const c of opts.company) companies.push(getOrCreateCompany(db, c, config))
-      const custom = parseKV(opts.set)
+      for (const c of data.company) companies.push(getOrCreateCompany(db, c, config))
+      const custom = parseKV(data.set)
       db.run('INSERT INTO contacts (id,name,emails,phones,companies,linkedin,x,bluesky,telegram,tags,custom_fields,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)',
-        [cid, opts.name, JSON.stringify(opts.email), JSON.stringify(phones), JSON.stringify(companies),
-         linkedin, x, bluesky, telegram, JSON.stringify(opts.tag), JSON.stringify(custom), n, n])
+        [cid, data.name, JSON.stringify(data.email), JSON.stringify(phones), JSON.stringify(companies),
+         linkedin, x, bluesky, telegram, JSON.stringify(data.tag), JSON.stringify(custom), n, n])
       const row = db.query('SELECT * FROM contacts WHERE id = ?').get(cid)
       upsertSearchIndex(db, 'contact', cid, buildContactSearch(row))
-      runHook(config, 'post-contact-add', { id: cid, name: opts.name, emails: opts.email, phones, companies, linkedin, x, bluesky, telegram, tags: opts.tag, custom_fields: custom })
+      runHook(config, 'post-contact-add', { id: cid, name: data.name, emails: data.email, phones, companies, linkedin, x, bluesky, telegram, tags: data.tag, custom_fields: custom })
       console.log(cid)
     })
 
@@ -101,18 +111,23 @@ export function registerContactCommands(program: Command) {
       const { db, config } = getCtx()
       const c = resolveContact(db, ref, config)
       if (!c) die(`Error: contact not found: ${ref}`)
+
+      // Validate and transform edit inputs via Zod
+      const parsed = contactEditSchema(config.phone.default_country).safeParse(opts)
+      if (!parsed.success) die(`Error: ${formatZodError(parsed.error)}`)
+      const data = parsed.data
+
       let emails: string[] = safeJSON(c.emails)
       let phones: string[] = safeJSON(c.phones)
       let companies: string[] = safeJSON(c.companies)
       let tags: string[] = safeJSON(c.tags)
       let custom: Record<string, any> = safeJSON(c.custom_fields)
       let name = c.name, linkedin = c.linkedin, x = c.x, bluesky = c.bluesky, telegram = c.telegram
-      if (opts.name) name = opts.name
-      for (const e of opts.addEmail) { checkDupeEmail(db, e, c.id); if (!emails.includes(e)) emails.push(e) }
-      for (const e of opts.rmEmail) emails = emails.filter(v => v !== e)
-      for (const p of opts.addPhone) {
-        const norm = normalizePhone(p, config.phone.default_country)
-        if (phones.includes(norm)) die(`Error: duplicate phone "${p}" — already on this contact`)
+      if (data.name) name = data.name
+      for (const e of data.addEmail) { checkDupeEmail(db, e, c.id); if (!emails.includes(e)) emails.push(e) }
+      for (const e of data.rmEmail) emails = emails.filter(v => v !== e)
+      for (const norm of data.addPhone) {
+        if (phones.includes(norm)) die(`Error: duplicate phone "${norm}" — already on this contact`)
         checkDupePhone(db, norm, 'contacts', c.id)
         phones.push(norm)
       }
@@ -120,17 +135,17 @@ export function registerContactCommands(program: Command) {
         const norm = tryNormalizePhone(p, config.phone.default_country)
         phones = norm ? phones.filter(v => v !== norm) : phones.filter(v => v !== p)
       }
-      for (const co of opts.addCompany) { const n = getOrCreateCompany(db, co, config); if (!companies.includes(n)) companies.push(n) }
-      for (const co of opts.rmCompany) companies = companies.filter(v => v !== co)
-      for (const t of opts.addTag) { if (!tags.includes(t)) tags.push(t) }
-      for (const t of opts.rmTag) tags = tags.filter(v => v !== t)
-      if (opts.linkedin) linkedin = normalizeSocialHandle('linkedin', opts.linkedin)
-      if (opts.x) x = normalizeSocialHandle('x', opts.x)
-      if (opts.bluesky) bluesky = normalizeSocialHandle('bluesky', opts.bluesky)
-      if (opts.telegram) telegram = normalizeSocialHandle('telegram', opts.telegram)
-      const kvs = parseKV(opts.set)
+      for (const co of data.addCompany) { const n = getOrCreateCompany(db, co, config); if (!companies.includes(n)) companies.push(n) }
+      for (const co of data.rmCompany) companies = companies.filter(v => v !== co)
+      for (const t of data.addTag) { if (!tags.includes(t)) tags.push(t) }
+      for (const t of data.rmTag) tags = tags.filter(v => v !== t)
+      if (data.linkedin) linkedin = data.linkedin
+      if (data.x) x = data.x
+      if (data.bluesky) bluesky = data.bluesky
+      if (data.telegram) telegram = data.telegram
+      const kvs = parseKV(data.set)
       for (const [k, v] of Object.entries(kvs)) custom[k] = v
-      for (const k of opts.unset) {
+      for (const k of data.unset) {
         delete custom[k]
         if (k === 'linkedin') linkedin = null
         if (k === 'x') x = null

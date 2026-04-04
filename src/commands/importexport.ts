@@ -5,6 +5,7 @@ import { resolveContact, resolveCompany } from '../resolve'
 import { formatOutput, contactToRow, companyToRow, dealToRow, activityToRow, safeJSON } from '../format'
 import { upsertSearchIndex } from '../db'
 import { tryNormalizePhone, normalizeWebsite } from '../normalize'
+import { importContactRowSchema, importCompanyRowSchema, importDealRowSchema } from '../schema'
 
 const CONTACT_FIELDS = new Set(['name', 'email', 'emails', 'phone', 'phones', 'company', 'companies', 'tags', 'linkedin', 'x', 'bluesky', 'telegram'])
 const COMPANY_FIELDS = new Set(['name', 'website', 'websites', 'phone', 'phones', 'tags'])
@@ -20,7 +21,8 @@ export function registerImportExportCommands(program: Command) {
       let imported = 0, skipped = 0, errors = 0
       for (const rec of records) {
         try {
-          if (!rec.name) { if (opts.skipErrors) { errors++; continue }; die('Error: row missing name') }
+          const rowParsed = importContactRowSchema.safeParse(rec)
+          if (!rowParsed.success) { if (opts.skipErrors) { errors++; continue }; die('Error: row missing name') }
           const name = rec.name || ''
           const emails = splitField(rec.email || rec.emails)
           const phones = splitField(rec.phone || rec.phones).map(p => {
@@ -76,7 +78,8 @@ export function registerImportExportCommands(program: Command) {
       let imported = 0
       for (const rec of records) {
         try {
-          if (!rec.name) { if (opts.skipErrors) continue; die('Error: company missing name') }
+          const rowParsed = importCompanyRowSchema.safeParse(rec)
+          if (!rowParsed.success) { if (opts.skipErrors) continue; die('Error: company missing name') }
           const websites = splitField(rec.website || rec.websites).map(w => {
             try { return normalizeWebsite(w) } catch { return w }
           })
@@ -112,7 +115,8 @@ export function registerImportExportCommands(program: Command) {
       let imported = 0
       for (const rec of records) {
         try {
-          if (!rec.title) { if (opts.skipErrors) continue; die('Error: deal missing title') }
+          const rowParsed = importDealRowSchema.safeParse(rec)
+          if (!rowParsed.success) { if (opts.skipErrors) continue; die('Error: deal missing title') }
           const stage = rec.stage || config.pipeline.stages[0]
           const value = rec.value ? Number(rec.value) : null
           const tags = splitField(rec.tags)

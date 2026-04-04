@@ -6,6 +6,7 @@ import { formatOutput, companyToRow, safeJSON } from '../format'
 import { resolveCompany } from '../resolve'
 import { upsertSearchIndex, removeSearchIndex } from '../db'
 import { runHook } from '../hooks'
+import { companyAddSchema, companyEditSchema, formatZodError } from '../schema'
 
 export function registerCompanyCommands(program: Command) {
   const cmd = program.command('company').description('Manage companies')
@@ -18,25 +19,31 @@ export function registerCompanyCommands(program: Command) {
     .option('--set <kv>', 'Custom field', collect, [])
     .action((opts) => {
       const { db, config } = getCtx()
+
+      // Validate and transform inputs via Zod
+      const parsed = companyAddSchema(config.phone.default_country).safeParse(opts)
+      if (!parsed.success) {
+        const firstIssue = parsed.error.issues[0]
+        if (firstIssue.path[0] === 'phone') {
+          die(`Error: invalid phone — ${firstIssue.message}`)
+        }
+        die(`Error: ${formatZodError(parsed.error)}`)
+      }
+      const data = parsed.data
+
       const cid = makeId('co')
       const n = now()
-      const websites: string[] = []
-      for (const w of opts.website) {
-        const norm = normalizeWebsite(w)
+      const websites = data.website
+      for (const norm of websites) {
         checkDupeWebsite(db, norm)
-        websites.push(norm)
       }
-      const phones: string[] = []
-      for (const p of opts.phone) {
-        try {
-          const norm = normalizePhone(p, config.phone.default_country)
-          checkDupePhone(db, norm, 'companies')
-          phones.push(norm)
-        } catch (e: any) { die(`Error: invalid phone — ${e.message}`) }
+      const phones = data.phone
+      for (const norm of phones) {
+        checkDupePhone(db, norm, 'companies')
       }
-      const custom = parseKV(opts.set)
+      const custom = parseKV(data.set)
       db.run('INSERT INTO companies (id,name,websites,phones,tags,custom_fields,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?)',
-        [cid, opts.name, JSON.stringify(websites), JSON.stringify(phones), JSON.stringify(opts.tag), JSON.stringify(custom), n, n])
+        [cid, data.name, JSON.stringify(websites), JSON.stringify(phones), JSON.stringify(data.tag), JSON.stringify(custom), n, n])
       const row = db.query('SELECT * FROM companies WHERE id = ?').get(cid)
       upsertSearchIndex(db, 'company', cid, buildCompanySearch(row))
       console.log(cid)
@@ -77,22 +84,26 @@ export function registerCompanyCommands(program: Command) {
       const { db, config } = getCtx()
       const co = resolveCompany(db, ref, config)
       if (!co) die(`Error: company not found: ${ref}`)
+
+      // Validate and transform edit inputs via Zod
+      const parsed = companyEditSchema(config.phone.default_country).safeParse(opts)
+      if (!parsed.success) die(`Error: ${formatZodError(parsed.error)}`)
+      const data = parsed.data
+
       let websites: string[] = safeJSON(co.websites)
       let phones: string[] = safeJSON(co.phones)
       let tags: string[] = safeJSON(co.tags)
       let custom: Record<string, any> = safeJSON(co.custom_fields)
       let name = co.name
-      if (opts.name) name = opts.name
-      for (const w of opts.addWebsite) {
-        const norm = normalizeWebsite(w)
-        if (websites.includes(norm)) die(`Error: duplicate website "${w}" — already on this company`)
+      if (data.name) name = data.name
+      for (const norm of data.addWebsite) {
+        if (websites.includes(norm)) die(`Error: duplicate website "${norm}" — already on this company`)
         checkDupeWebsite(db, norm, co.id)
         websites.push(norm)
       }
       for (const w of opts.rmWebsite) { const norm = normalizeWebsite(w); websites = websites.filter(v => v !== norm) }
-      for (const p of opts.addPhone) {
-        const norm = normalizePhone(p, config.phone.default_country)
-        if (phones.includes(norm)) die(`Error: duplicate phone "${p}" — already on this company`)
+      for (const norm of data.addPhone) {
+        if (phones.includes(norm)) die(`Error: duplicate phone "${norm}" — already on this company`)
         checkDupePhone(db, norm, 'companies', co.id)
         phones.push(norm)
       }
@@ -100,11 +111,11 @@ export function registerCompanyCommands(program: Command) {
         const norm = tryNormalizePhone(p, config.phone.default_country)
         phones = norm ? phones.filter(v => v !== norm) : phones.filter(v => v !== p)
       }
-      for (const t of opts.addTag) { if (!tags.includes(t)) tags.push(t) }
-      for (const t of opts.rmTag) tags = tags.filter(v => v !== t)
-      const kvs = parseKV(opts.set)
+      for (const t of data.addTag) { if (!tags.includes(t)) tags.push(t) }
+      for (const t of data.rmTag) tags = tags.filter(v => v !== t)
+      const kvs = parseKV(data.set)
       for (const [k, v] of Object.entries(kvs)) custom[k] = v
-      for (const k of opts.unset) delete custom[k]
+      for (const k of data.unset) delete custom[k]
       db.run('UPDATE companies SET name=?,websites=?,phones=?,tags=?,custom_fields=?,updated_at=? WHERE id=?',
         [name, JSON.stringify(websites), JSON.stringify(phones), JSON.stringify(tags), JSON.stringify(custom), now(), co.id])
       const row = db.query('SELECT * FROM companies WHERE id = ?').get(co.id)
