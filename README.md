@@ -831,27 +831,44 @@ find ~/crm/deals/_by-stage/lead/ -name "*.json" | xargs jq '.value'
 
 ### Write Operations
 
-Writing a JSON file creates or updates the entity. The filename is ignored for creates — the ID is auto-generated.
+Writes are **full-document replacements** — the JSON you write becomes the complete state of the entity. This matches how files work: read → modify → write back.
+
+**Validation is strict.** Every write goes through the same Zod schema validation as the CLI:
+
+| Error | errno | Feedback |
+|-------|-------|----------|
+| Malformed JSON (parse error) | `EINVAL` | `Invalid JSON: Unexpected token...` |
+| Unknown key | `EINVAL` | `Unknown field: "bogus". Valid fields: name, emails, phones, ...` |
+| Missing required field | `EINVAL` | `Missing required field: "name"` |
+| Type mismatch | `EINVAL` | `Invalid type for "emails": expected array, got string` |
+| Write in readonly mode | `EROFS` | `Filesystem mounted read-only` |
+
+Errors are returned as the write syscall error, so agents get immediate feedback and can self-correct.
 
 ```bash
 # Create a new contact (write any filename — ID is auto-assigned)
 echo '{"name": "Bob Smith", "emails": ["bob@globex.com"]}' > ~/crm/contacts/new.json
 
-# Update an existing contact (write to its actual file)
-# Read, modify, write back:
+# Update an existing contact — FULL document write (read, modify, write back)
 jq '.title = "VP Engineering"' ~/crm/contacts/ct_01J8Z...jane-doe.json | \
   sponge ~/crm/contacts/ct_01J8Z...jane-doe.json
 
 # Delete a contact
 rm ~/crm/contacts/ct_01J8Z...jane-doe.json
 
-# Move a deal stage (update the stage field)
+# Move a deal stage (update the stage field in the full document)
 jq '.stage = "closed-won"' ~/crm/deals/dl_01J8Z...acme-enterprise.json | \
   sponge ~/crm/deals/dl_01J8Z...acme-enterprise.json
 
 # Log an activity (write to activities/)
 echo '{"type": "note", "entity_ref": "jane@acme.com", "note": "Follow up on proposal"}' \
   > ~/crm/activities/new.json
+
+# Error cases — all rejected with EINVAL
+echo 'not json'                  > ~/crm/contacts/new.json    # parse error
+echo '{"bogus": 1}'             > ~/crm/contacts/new.json    # unknown field
+echo '{"emails": ["a@b.com"]}'  > ~/crm/contacts/new.json    # missing "name"
+echo '{"name": "X", "emails": "wrong"}' > ~/crm/contacts/new.json  # type mismatch
 ```
 
 ### AI Agent Usage

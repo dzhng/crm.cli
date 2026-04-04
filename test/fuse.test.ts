@@ -537,6 +537,149 @@ describe('fuse: write operations', () => {
 })
 
 // ---------------------------------------------------------------------------
+// Validation: strict writes
+// ---------------------------------------------------------------------------
+
+describe('fuse: write validation', () => {
+  test('malformed JSON rejects with EINVAL', () => {
+    const ctx = createFuseTestContext()
+    if (skipIfNoFuse(ctx)) return
+    try {
+      expect(() => {
+        writeFileSync(join(ctx.mountPoint, 'contacts', 'bad.json'), 'not json at all')
+      }).toThrow()
+
+      // No contact should have been created.
+      const contacts = ctx.runJSON<unknown[]>('contact', 'list', '--format', 'json')
+      expect(contacts).toHaveLength(0)
+    } finally {
+      unmount(ctx)
+    }
+  })
+
+  test('unknown field rejects with EINVAL', () => {
+    const ctx = createFuseTestContext()
+    if (skipIfNoFuse(ctx)) return
+    try {
+      expect(() => {
+        writeFileSync(
+          join(ctx.mountPoint, 'contacts', 'bad.json'),
+          JSON.stringify({ name: 'Jane', bogus: 'field' }),
+        )
+      }).toThrow()
+
+      const contacts = ctx.runJSON<unknown[]>('contact', 'list', '--format', 'json')
+      expect(contacts).toHaveLength(0)
+    } finally {
+      unmount(ctx)
+    }
+  })
+
+  test('missing required field rejects with EINVAL', () => {
+    const ctx = createFuseTestContext()
+    if (skipIfNoFuse(ctx)) return
+    try {
+      // Contact requires "name" — writing without it should fail.
+      expect(() => {
+        writeFileSync(
+          join(ctx.mountPoint, 'contacts', 'bad.json'),
+          JSON.stringify({ emails: ['no-name@acme.com'] }),
+        )
+      }).toThrow()
+
+      const contacts = ctx.runJSON<unknown[]>('contact', 'list', '--format', 'json')
+      expect(contacts).toHaveLength(0)
+    } finally {
+      unmount(ctx)
+    }
+  })
+
+  test('type mismatch rejects with EINVAL', () => {
+    const ctx = createFuseTestContext()
+    if (skipIfNoFuse(ctx)) return
+    try {
+      // "emails" must be an array, not a string.
+      expect(() => {
+        writeFileSync(
+          join(ctx.mountPoint, 'contacts', 'bad.json'),
+          JSON.stringify({ name: 'Jane', emails: 'not-an-array' }),
+        )
+      }).toThrow()
+
+      const contacts = ctx.runJSON<unknown[]>('contact', 'list', '--format', 'json')
+      expect(contacts).toHaveLength(0)
+    } finally {
+      unmount(ctx)
+    }
+  })
+
+  test('valid write still succeeds after prior validation errors', () => {
+    const ctx = createFuseTestContext()
+    if (skipIfNoFuse(ctx)) return
+    try {
+      // Fail first.
+      expect(() => {
+        writeFileSync(join(ctx.mountPoint, 'contacts', 'bad.json'), 'not json')
+      }).toThrow()
+
+      // Then succeed.
+      writeFileSync(
+        join(ctx.mountPoint, 'contacts', 'good.json'),
+        JSON.stringify({ name: 'Valid Contact', emails: ['valid@acme.com'] }),
+      )
+
+      const contacts = ctx.runJSON<Array<{ name: string }>>('contact', 'list', '--format', 'json')
+      expect(contacts).toHaveLength(1)
+      expect(contacts[0].name).toBe('Valid Contact')
+    } finally {
+      unmount(ctx)
+    }
+  })
+
+  test('update with full document replaces all fields', () => {
+    const ctx = createFuseTestContext()
+    if (skipIfNoFuse(ctx)) return
+    try {
+      ctx.runOK('contact', 'add', '--name', 'Jane Doe', '--email', 'jane@acme.com', '--title', 'CTO')
+
+      const files = readdirSync(join(ctx.mountPoint, 'contacts')).filter((f) => f.endsWith('.json') && !f.startsWith('_'))
+      const filePath = join(ctx.mountPoint, 'contacts', files[0])
+
+      // Write back WITHOUT title — full doc replace means title should be cleared.
+      writeFileSync(filePath, JSON.stringify({ name: 'Jane Doe', emails: ['jane@acme.com'] }))
+
+      const data = JSON.parse(readFileSync(filePath, 'utf-8'))
+      expect(data.name).toBe('Jane Doe')
+      expect(data.title).toBeUndefined()
+    } finally {
+      unmount(ctx)
+    }
+  })
+
+  test('unknown field on update also rejects', () => {
+    const ctx = createFuseTestContext()
+    if (skipIfNoFuse(ctx)) return
+    try {
+      ctx.runOK('contact', 'add', '--name', 'Jane', '--email', 'jane@acme.com')
+
+      const files = readdirSync(join(ctx.mountPoint, 'contacts')).filter((f) => f.endsWith('.json') && !f.startsWith('_'))
+      const filePath = join(ctx.mountPoint, 'contacts', files[0])
+
+      expect(() => {
+        writeFileSync(filePath, JSON.stringify({ name: 'Jane', emails: ['jane@acme.com'], nonexistent: true }))
+      }).toThrow()
+
+      // Original data should be unchanged.
+      const data = JSON.parse(readFileSync(filePath, 'utf-8'))
+      expect(data.name).toBe('Jane')
+      expect(data).not.toHaveProperty('nonexistent')
+    } finally {
+      unmount(ctx)
+    }
+  })
+})
+
+// ---------------------------------------------------------------------------
 // Read-only mode
 // ---------------------------------------------------------------------------
 
