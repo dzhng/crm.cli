@@ -16,7 +16,7 @@ describe('contact add', () => {
         'contact', 'add',
         '--name', 'Jane Doe',
         '--email', 'jane@acme.com',
-        '--phone', '+1-555-0100',
+        '--phone', '+1-212-555-1234',
         '--company', 'Acme Corp',
         '--tag', 'hot-lead',
         '--tag', 'enterprise',
@@ -29,7 +29,7 @@ describe('contact add', () => {
     const show = ctx.runOK('contact', 'show', id)
     expect(show).toContain('Jane Doe')
     expect(show).toContain('jane@acme.com')
-    expect(show).toContain('+1-555-0100')
+    expect(show).toContain('+1 212 555 1234')
     expect(show).toContain('CTO')
     expect(show).toContain('conference')
     expect(show).toContain('hot-lead')
@@ -66,12 +66,12 @@ describe('contact add', () => {
     const ctx = createTestContext()
     const id = ctx.runOK(
       'contact', 'add', '--name', 'Jane Doe',
-      '--phone', '+1-555-0100', '--phone', '+44-20-7946-0958',
+      '--phone', '+1-212-555-1234', '--phone', '+44-20-7946-0958',
     ).trim()
 
     const show = ctx.runOK('contact', 'show', id)
-    expect(show).toContain('+1-555-0100')
-    expect(show).toContain('+44-20-7946-0958')
+    expect(show).toContain('+1 212 555 1234')
+    expect(show).toContain('+44 20 7946 0958')
   })
 
   test('lookup by any email when contact has multiple', () => {
@@ -106,15 +106,15 @@ describe('contact show', () => {
 
   test('by phone', () => {
     const ctx = createTestContext()
-    ctx.runOK('contact', 'add', '--name', 'Jane Doe', '--phone', '+1-555-0100')
-    const out = ctx.runOK('contact', 'show', '+1-555-0100')
+    ctx.runOK('contact', 'add', '--name', 'Jane Doe', '--phone', '+1-212-555-1234')
+    const out = ctx.runOK('contact', 'show', '+12125551234')
     expect(out).toContain('Jane Doe')
   })
 
   test('contact with phone but no email is lookupable by phone', () => {
     const ctx = createTestContext()
     ctx.runOK('contact', 'add', '--name', 'Phone Only', '--phone', '+44-20-7946-0958')
-    const out = ctx.runOK('contact', 'show', '+44-20-7946-0958')
+    const out = ctx.runOK('contact', 'show', '+442079460958')
     expect(out).toContain('Phone Only')
   })
 
@@ -286,22 +286,22 @@ describe('contact edit', () => {
 
   test('add phone to existing contact', () => {
     const ctx = createTestContext()
-    const id = ctx.runOK('contact', 'add', '--name', 'Jane', '--phone', '+1-555-0100').trim()
+    const id = ctx.runOK('contact', 'add', '--name', 'Jane', '--phone', '+1-212-555-1234').trim()
     ctx.runOK('contact', 'edit', id, '--add-phone', '+44-20-7946-0958')
 
     const show = ctx.runOK('contact', 'show', id)
-    expect(show).toContain('+1-555-0100')
-    expect(show).toContain('+44-20-7946-0958')
+    expect(show).toContain('+1 212 555 1234')
+    expect(show).toContain('+44 20 7946 0958')
   })
 
   test('remove phone from contact', () => {
     const ctx = createTestContext()
-    const id = ctx.runOK('contact', 'add', '--name', 'Jane', '--phone', '+1-555-0100', '--phone', '+1-555-OLD').trim()
-    ctx.runOK('contact', 'edit', id, '--rm-phone', '+1-555-OLD')
+    const id = ctx.runOK('contact', 'add', '--name', 'Jane', '--phone', '+1-212-555-1234', '--phone', '+1-310-555-9876').trim()
+    ctx.runOK('contact', 'edit', id, '--rm-phone', '+1-310-555-9876')
 
     const show = ctx.runOK('contact', 'show', id)
-    expect(show).toContain('+1-555-0100')
-    expect(show).not.toContain('+1-555-OLD')
+    expect(show).toContain('+1 212 555 1234')
+    expect(show).not.toContain('+1 310 555 9876')
   })
 })
 
@@ -318,6 +318,118 @@ describe('contact rm', () => {
     ctx.runOK('contact', 'add', '--name', 'Jane', '--email', 'jane@acme.com')
     ctx.runOK('contact', 'rm', 'jane@acme.com', '--force')
     ctx.runFail('contact', 'show', 'jane@acme.com')
+  })
+})
+
+describe('contact phone normalization', () => {
+  test('various formats normalize to same E.164', () => {
+    const ctx = createTestContext()
+    ctx.runOK('contact', 'add', '--name', 'Jane', '--phone', '+1-212-555-1234')
+
+    // All these formats should find the same contact
+    const show1 = ctx.runOK('contact', 'show', '+12125551234')
+    const show2 = ctx.runOK('contact', 'show', '+1-212-555-1234')
+    const show3 = ctx.runOK('contact', 'show', '(212) 555-1234')  // requires default_country=US
+    expect(show1).toContain('Jane')
+    expect(show2).toContain('Jane')
+    expect(show3).toContain('Jane')
+  })
+
+  test('phones stored as E.164 in JSON output', () => {
+    const ctx = createTestContext()
+    ctx.runOK('contact', 'add', '--name', 'Jane', '--phone', '+1-212-555-1234')
+
+    const contacts = ctx.runJSON<Array<{ phones: string[] }>>('contact', 'list', '--format', 'json')
+    expect(contacts[0].phones[0]).toBe('+12125551234')
+  })
+
+  test('display format is international by default', () => {
+    const ctx = createTestContext()
+    ctx.runOK('contact', 'add', '--name', 'Jane', '--phone', '+12125551234')
+
+    const show = ctx.runOK('contact', 'show', '+12125551234')
+    expect(show).toContain('+1 212 555 1234')
+  })
+
+  test('duplicate detection across formats', () => {
+    const ctx = createTestContext()
+    ctx.runOK('contact', 'add', '--name', 'Jane', '--phone', '+1-212-555-1234')
+
+    // Same number in different format — should fail as duplicate
+    const result = ctx.runFail('contact', 'add', '--name', 'Bob', '--phone', '(212) 555-1234')
+    expect(result.stderr).toContain('duplicate')
+  })
+
+  test('invalid phone number rejected', () => {
+    const ctx = createTestContext()
+    const result = ctx.runFail('contact', 'add', '--name', 'Jane', '--phone', 'not-a-number')
+    expect(result.stderr).toContain('invalid')
+  })
+
+  test('too-short phone number rejected', () => {
+    const ctx = createTestContext()
+    const result = ctx.runFail('contact', 'add', '--name', 'Jane', '--phone', '123')
+    expect(result.stderr).toContain('invalid')
+  })
+
+  test('national format uses default_country from config', () => {
+    const ctx = createTestContext()
+    // With default_country=US in config, a national number should normalize to +1
+    ctx.runWithEnv({ CRM_PHONE_DEFAULT_COUNTRY: 'US' },
+      'contact', 'add', '--name', 'Jane', '--phone', '(212) 555-1234',
+    )
+
+    const contacts = ctx.runJSON<Array<{ phones: string[] }>>('contact', 'list', '--format', 'json')
+    expect(contacts[0].phones[0]).toBe('+12125551234')
+  })
+
+  test('national format fails without default_country when no country code', () => {
+    const ctx = createTestContext()
+    // Without default_country and without +country prefix, should fail
+    const result = ctx.runFail('contact', 'add', '--name', 'Jane', '--phone', '2125551234')
+    expect(result.stderr).toContain('country')
+  })
+
+  test('rm-phone matches across formats', () => {
+    const ctx = createTestContext()
+    const id = ctx.runOK('contact', 'add', '--name', 'Jane', '--phone', '+1-212-555-1234', '--phone', '+44-20-7946-0958').trim()
+
+    // Remove using a different format than how it was added
+    ctx.runOK('contact', 'edit', id, '--rm-phone', '(212) 555-1234')
+
+    const contacts = ctx.runJSON<Array<{ phones: string[] }>>('contact', 'list', '--format', 'json')
+    expect(contacts[0].phones).toHaveLength(1)
+    expect(contacts[0].phones[0]).toBe('+442079460958')
+  })
+
+  test('add-phone rejects duplicate in different format', () => {
+    const ctx = createTestContext()
+    const id = ctx.runOK('contact', 'add', '--name', 'Jane', '--phone', '+1-212-555-1234').trim()
+
+    const result = ctx.runFail('contact', 'edit', id, '--add-phone', '(212) 555-1234')
+    expect(result.stderr).toContain('duplicate')
+  })
+
+  test('UK number normalization', () => {
+    const ctx = createTestContext()
+    ctx.runOK('contact', 'add', '--name', 'Jane', '--phone', '+44 20 7946 0958')
+
+    const contacts = ctx.runJSON<Array<{ phones: string[] }>>('contact', 'list', '--format', 'json')
+    expect(contacts[0].phones[0]).toBe('+442079460958')
+
+    // Lookup with different format
+    const show = ctx.runOK('contact', 'show', '+44-20-7946-0958')
+    expect(show).toContain('Jane')
+  })
+
+  test('display format e164', () => {
+    const ctx = createTestContext()
+    ctx.runWithEnv({ CRM_PHONE_DISPLAY: 'e164' },
+      'contact', 'add', '--name', 'Jane', '--phone', '+1-212-555-1234',
+    )
+
+    const show = ctx.runOK('contact', 'show', '+12125551234')
+    expect(show).toContain('+12125551234')
   })
 })
 

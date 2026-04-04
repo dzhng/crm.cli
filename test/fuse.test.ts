@@ -185,13 +185,14 @@ describe('fuse: read contacts', () => {
     }
   })
 
-  test('_by-phone symlink resolves to correct contact', () => {
+  test('_by-phone symlink uses E.164 filename', () => {
     const ctx = createFuseTestContext()
     if (skipIfNoFuse(ctx)) return
     try {
-      ctx.runOK('contact', 'add', '--name', 'Jane Doe', '--phone', '+1-555-0100')
+      ctx.runOK('contact', 'add', '--name', 'Jane Doe', '--phone', '+1-212-555-1234')
 
-      const data = JSON.parse(readFileSync(join(ctx.mountPoint, 'contacts', '_by-phone', '+1-555-0100.json'), 'utf-8'))
+      // Symlink filename uses E.164 format regardless of input format
+      const data = JSON.parse(readFileSync(join(ctx.mountPoint, 'contacts', '_by-phone', '+12125551234.json'), 'utf-8'))
       expect(data.name).toBe('Jane Doe')
     } finally {
       unmount(ctx)
@@ -688,6 +689,88 @@ describe('fuse: write validation', () => {
       const data = JSON.parse(readFileSync(filePath, 'utf-8'))
       expect(data.name).toBe('Jane')
       expect(data).not.toHaveProperty('nonexistent')
+    } finally {
+      unmount(ctx)
+    }
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Phone normalization in FUSE
+// ---------------------------------------------------------------------------
+
+describe('fuse: phone normalization', () => {
+  test('_by-phone symlinks use E.164 regardless of input format', () => {
+    const ctx = createFuseTestContext()
+    if (skipIfNoFuse(ctx)) return
+    try {
+      ctx.runOK('contact', 'add', '--name', 'Jane', '--phone', '+44 20 7946 0958')
+
+      // Symlink should be E.164 normalized
+      const byPhone = readdirSync(join(ctx.mountPoint, 'contacts', '_by-phone'))
+      expect(byPhone).toContain('+442079460958.json')
+      expect(byPhone).not.toContain('+44 20 7946 0958.json')
+      expect(byPhone).not.toContain('+44-20-7946-0958.json')
+    } finally {
+      unmount(ctx)
+    }
+  })
+
+  test('company _by-phone also uses E.164', () => {
+    const ctx = createFuseTestContext()
+    if (skipIfNoFuse(ctx)) return
+    try {
+      ctx.runOK('company', 'add', '--name', 'Acme', '--phone', '+1-212-555-1234')
+
+      const byPhone = readdirSync(join(ctx.mountPoint, 'companies', '_by-phone'))
+      expect(byPhone).toContain('+12125551234.json')
+    } finally {
+      unmount(ctx)
+    }
+  })
+
+  test('phones in entity JSON files are E.164', () => {
+    const ctx = createFuseTestContext()
+    if (skipIfNoFuse(ctx)) return
+    try {
+      ctx.runOK('contact', 'add', '--name', 'Jane', '--email', 'jane@acme.com', '--phone', '+1-212-555-1234')
+
+      const data = JSON.parse(readFileSync(join(ctx.mountPoint, 'contacts', '_by-email', 'jane@acme.com.json'), 'utf-8'))
+      expect(data.phones[0]).toBe('+12125551234')
+    } finally {
+      unmount(ctx)
+    }
+  })
+
+  test('writing entity with non-E.164 phone normalizes on save', () => {
+    const ctx = createFuseTestContext()
+    if (skipIfNoFuse(ctx)) return
+    try {
+      writeFileSync(
+        join(ctx.mountPoint, 'contacts', 'new.json'),
+        JSON.stringify({ name: 'Bob', phones: ['+44 20 7946 0958'] }),
+      )
+
+      const contacts = ctx.runJSON<Array<{ phones: string[] }>>('contact', 'list', '--format', 'json')
+      expect(contacts[0].phones[0]).toBe('+442079460958')
+    } finally {
+      unmount(ctx)
+    }
+  })
+
+  test('writing entity with invalid phone rejects', () => {
+    const ctx = createFuseTestContext()
+    if (skipIfNoFuse(ctx)) return
+    try {
+      expect(() => {
+        writeFileSync(
+          join(ctx.mountPoint, 'contacts', 'bad.json'),
+          JSON.stringify({ name: 'Bob', phones: ['not-a-number'] }),
+        )
+      }).toThrow()
+
+      const contacts = ctx.runJSON<unknown[]>('contact', 'list', '--format', 'json')
+      expect(contacts).toHaveLength(0)
     } finally {
       unmount(ctx)
     }

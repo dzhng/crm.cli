@@ -67,6 +67,10 @@ stages = ["lead", "qualified", "proposal", "negotiation", "closed-won", "closed-
 [defaults]
 format = "table"    # table | json | csv | tsv | ids
 
+[phone]
+default_country = "US"    # ISO 3166-1 alpha-2; for numbers without country code
+display = "international" # international | national | e164
+
 [search]
 model = "all-MiniLM-L6-v2"    # local embedding model
 EOF
@@ -99,7 +103,7 @@ People you interact with.
 
 ```bash
 crm contact add --name "Jane Doe" --email jane@acme.com
-crm contact add --name "Jane Doe" --email jane@acme.com --email jane.doe@gmail.com --phone "+1-555-0100" --phone "+44-20-7946-0958" --company Acme --tag hot-lead --tag enterprise
+crm contact add --name "Jane Doe" --email jane@acme.com --email jane.doe@gmail.com --phone "+1-212-555-1234" --phone "+44-20-7946-0958" --company Acme --tag hot-lead --tag enterprise
 crm contact add --name "Jane Doe" --email jane@acme.com --set title=CTO --set source=conference --set linkedin=linkedin.com/in/janedoe --set notes="Met at SaaStr"
 ```
 
@@ -139,7 +143,7 @@ crm contact list --limit 10 --offset 20
 ```bash
 crm contact show ct_01J8Z...
 crm contact show jane@acme.com
-crm contact show "+1-555-0100"
+crm contact show "+1-212-555-1234"
 ```
 
 Accepts ID, any email, or any phone number. Shows full contact details including linked company, deals, activity history, tags, and custom fields.
@@ -149,7 +153,7 @@ Accepts ID, any email, or any phone number. Shows full contact details including
 ```bash
 crm contact edit jane@acme.com --name "Jane Smith"
 crm contact edit ct_01J8Z... --add-email jane.personal@gmail.com --rm-email old@acme.com
-crm contact edit ct_01J8Z... --add-phone "+44-20-7946-0958" --rm-phone "+1-555-OLD"
+crm contact edit ct_01J8Z... --add-phone "+44-20-7946-0958" --rm-phone "+1-310-555-9876"
 crm contact edit ct_01J8Z... --set title=CEO --set source=referral
 crm contact edit jane@acme.com --add-tag vip --rm-tag cold
 ```
@@ -171,7 +175,7 @@ crm contact edit jane@acme.com --add-tag vip --rm-tag cold
 
 ```bash
 crm contact rm jane@acme.com
-crm contact rm "+1-555-0100" --force    # skip confirmation
+crm contact rm "+1-212-555-1234" --force    # skip confirmation
 ```
 
 Prompts for confirmation unless `--force` is passed. Removes the contact and unlinks from deals/companies (does not delete linked entities).
@@ -194,7 +198,7 @@ Organizations that contacts belong to.
 
 ```bash
 crm company add --name "Acme Corp" --domain acme.com
-crm company add --name "Acme Corp" --domain acme.com --domain acme.co.uk --phone "+1-555-0100" --phone "+44-20-7946-0958" --tag enterprise --set industry=SaaS --set size=50-200
+crm company add --name "Acme Corp" --domain acme.com --domain acme.co.uk --phone "+1-212-555-1234" --phone "+44-20-7946-0958" --tag enterprise --set industry=SaaS --set size=50-200
 ```
 
 | Flag | Required | Description |
@@ -220,7 +224,7 @@ Same filtering/sorting flags as `crm contact list`.
 ```bash
 crm company show acme.com
 crm company show co_01J8Z...
-crm company show "+1-555-0100"
+crm company show "+1-212-555-1234"
 ```
 
 Accepts ID, any domain, or any phone number. Shows company details plus all linked contacts and deals.
@@ -230,7 +234,7 @@ Accepts ID, any domain, or any phone number. Shows company details plus all link
 ```bash
 crm company edit acme.com --name "Acme Inc" --set industry=Fintech
 crm company edit co_01J8Z... --add-domain acme.co.uk --add-phone "+44-20-7946-0958"
-crm company edit acme.com --rm-domain old-acme.com --rm-phone "+1-555-9999"
+crm company edit acme.com --rm-domain old-acme.com --rm-phone "+1-415-555-0000"
 ```
 
 | Flag | Description |
@@ -655,6 +659,66 @@ Hard-coded fields drive business logic (entity resolution, pipeline math, relati
 
 ---
 
+## Phone Normalization
+
+All phone numbers are normalized to [E.164](https://en.wikipedia.org/wiki/E.164) format on input using [`libphonenumber-js`](https://gitlab.com/nicolo-ribaudo/libphonenumber-js). This ensures consistent storage, deduplication, and lookup regardless of how numbers are entered.
+
+**Storage:** Always E.164 (`+12125551234`).
+
+**Display:** Configurable via `phone.display` in `crm.toml`:
+
+| Format | Example | Description |
+|--------|---------|-------------|
+| `international` (default) | `+1 212 555 1234` | Human-readable with spaces |
+| `national` | `(212) 555-1234` | Local format (requires `default_country`) |
+| `e164` | `+12125551234` | Raw stored format |
+
+**Input:** Any reasonable format is accepted and normalized:
+
+```bash
+crm contact add --name "Jane" --phone "+1-212-555-1234"     # international with dashes
+crm contact add --name "Jane" --phone "(212) 555-1234"      # national (uses default_country)
+crm contact add --name "Jane" --phone "2125551234"           # digits only (uses default_country)
+crm contact add --name "Jane" --phone "+12125551234"         # E.164
+# All four store the same E.164 value: +12125551234
+```
+
+**Lookup:** Any format resolves to the same entity:
+
+```bash
+crm contact show "+12125551234"       # E.164
+crm contact show "(212) 555-1234"     # national
+crm contact show "212-555-1234"       # partial
+# All three find the same contact
+```
+
+**Dedup:** All formats normalize to E.164, so duplicate detection works across formats:
+
+```bash
+crm contact add --name "Jane" --phone "+1-212-555-1234"
+crm contact add --name "Bob" --phone "(212) 555-1234"    # fails: duplicate phone
+```
+
+**Validation:** Invalid numbers are rejected:
+
+```bash
+crm contact add --name "Jane" --phone "not-a-number"     # error: invalid phone number
+crm contact add --name "Jane" --phone "123"               # error: too short
+```
+
+**Country code:** Numbers without a country code use `phone.default_country` from config (ISO 3166-1 alpha-2). If unset, a country code is required.
+
+```toml
+# crm.toml
+[phone]
+default_country = "US"
+display = "international"
+```
+
+**FUSE:** `_by-phone/` symlinks use E.164 filenames (`+12125551234.json`), so agents can look up phones in any format by normalizing first, or browse the directory for the canonical E.164 listing.
+
+---
+
 ## Filtering
 
 The `--filter` flag accepts expressions:
@@ -735,8 +799,8 @@ The mount point stays live — changes made via the CLI or filesystem are reflec
 │   ├── _by-email/                         # symlinks for email lookup
 │   │   ├── jane@acme.com.json → ../ct_01J8Z...jane-doe.json
 │   │   └── john@globex.com.json → ../ct_02K9A...john-smith.json
-│   ├── _by-phone/                         # symlinks for phone lookup
-│   │   └── +1-555-0100.json → ../ct_01J8Z...jane-doe.json
+│   ├── _by-phone/                         # symlinks for phone lookup (E.164 filenames)
+│   │   └── +12125551234.json → ../ct_01J8Z...jane-doe.json
 │   ├── _by-company/                       # symlinks grouped by company
 │   │   └── acme-corp/
 │   │       └── ct_01J8Z...jane-doe.json → ../../ct_01J8Z...jane-doe.json
@@ -750,8 +814,8 @@ The mount point stays live — changes made via the CLI or filesystem are reflec
 │   ├── _by-domain/
 │   │   ├── acme.com.json → ../co_01J8Z...acme-corp.json
 │   │   └── acme.co.uk.json → ../co_01J8Z...acme-corp.json
-│   ├── _by-phone/
-│   │   └── +1-555-0100.json → ../co_01J8Z...acme-corp.json
+│   ├── _by-phone/                         # E.164 filenames
+│   │   └── +12125551234.json → ../co_01J8Z...acme-corp.json
 │   └── _by-tag/
 │       └── enterprise/
 │           └── co_01J8Z...acme-corp.json → ../../co_01J8Z...acme-corp.json
@@ -805,7 +869,7 @@ Each entity file is a self-contained JSON document with linked data inlined:
   "id": "ct_01J8ZVXB3K...",
   "name": "Jane Doe",
   "emails": ["jane@acme.com", "jane.doe@gmail.com"],
-  "phones": ["+1-555-0100"],
+  "phones": ["+12125551234"],
   "company": {
     "id": "co_01J8Z...",
     "name": "Acme Corp"
@@ -836,7 +900,7 @@ cat ~/crm/contacts/ct_01J8Z...jane-doe.json
 
 # Look up by email or phone
 cat ~/crm/contacts/_by-email/jane@acme.com.json
-cat ~/crm/contacts/_by-phone/+1-555-0100.json
+cat ~/crm/contacts/_by-phone/+12125551234.json
 
 # List all deals in a pipeline stage
 ls ~/crm/deals/_by-stage/qualified/
@@ -989,6 +1053,7 @@ The CLI is a thin wrapper around a TypeScript library (`src/`). Other interfaces
 - **Runtime:** [Bun](https://bun.sh)
 - **Language:** TypeScript (strict mode)
 - **Database:** SQLite via [libSQL](https://github.com/tursodatabase/libsql) + [Drizzle ORM](https://orm.drizzle.team)
+- **Phone normalization:** [libphonenumber-js](https://gitlab.com/nicolo-ribaudo/libphonenumber-js) (E.164)
 - **Validation:** [Zod](https://zod.dev)
 - **Linting:** [Biome](https://biomejs.dev) via [Ultracite](https://github.com/haydenbleasel/ultracite)
 - **Testing:** `bun test` (functional tests at the CLI level)

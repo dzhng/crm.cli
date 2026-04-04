@@ -54,12 +54,12 @@ describe('company add', () => {
     const ctx = createTestContext()
     const id = ctx.runOK(
       'company', 'add', '--name', 'Acme Corp',
-      '--phone', '+1-555-0100', '--phone', '+44-20-7946-0958',
+      '--phone', '+1-212-555-1234', '--phone', '+44-20-7946-0958',
     ).trim()
 
     const show = ctx.runOK('company', 'show', id)
-    expect(show).toContain('+1-555-0100')
-    expect(show).toContain('+44-20-7946-0958')
+    expect(show).toContain('+1 212 555 1234')
+    expect(show).toContain('+44 20 7946 0958')
   })
 
   test('lookup by any domain when company has multiple', () => {
@@ -86,15 +86,15 @@ describe('company show', () => {
 
   test('by phone', () => {
     const ctx = createTestContext()
-    ctx.runOK('company', 'add', '--name', 'Acme Corp', '--phone', '+1-555-0100')
-    const out = ctx.runOK('company', 'show', '+1-555-0100')
+    ctx.runOK('company', 'add', '--name', 'Acme Corp', '--phone', '+1-212-555-1234')
+    const out = ctx.runOK('company', 'show', '+12125551234')
     expect(out).toContain('Acme Corp')
   })
 
   test('company with phone but no domain is lookupable by phone', () => {
     const ctx = createTestContext()
     ctx.runOK('company', 'add', '--name', 'Phone Only Corp', '--phone', '+44-20-7946-0958')
-    const out = ctx.runOK('company', 'show', '+44-20-7946-0958')
+    const out = ctx.runOK('company', 'show', '+442079460958')
     expect(out).toContain('Phone Only Corp')
   })
 
@@ -173,22 +173,22 @@ describe('company edit', () => {
 
   test('add phone to existing company', () => {
     const ctx = createTestContext()
-    const id = ctx.runOK('company', 'add', '--name', 'Acme', '--phone', '+1-555-0100').trim()
+    const id = ctx.runOK('company', 'add', '--name', 'Acme', '--phone', '+1-212-555-1234').trim()
     ctx.runOK('company', 'edit', id, '--add-phone', '+44-20-7946-0958')
 
     const show = ctx.runOK('company', 'show', id)
-    expect(show).toContain('+1-555-0100')
-    expect(show).toContain('+44-20-7946-0958')
+    expect(show).toContain('+1 212 555 1234')
+    expect(show).toContain('+44 20 7946 0958')
   })
 
   test('remove phone from company', () => {
     const ctx = createTestContext()
-    const id = ctx.runOK('company', 'add', '--name', 'Acme', '--phone', '+1-555-0100', '--phone', '+1-555-OLD').trim()
-    ctx.runOK('company', 'edit', id, '--rm-phone', '+1-555-OLD')
+    const id = ctx.runOK('company', 'add', '--name', 'Acme', '--phone', '+1-212-555-1234', '--phone', '+1-310-555-9876').trim()
+    ctx.runOK('company', 'edit', id, '--rm-phone', '+1-310-555-9876')
 
     const show = ctx.runOK('company', 'show', id)
-    expect(show).toContain('+1-555-0100')
-    expect(show).not.toContain('+1-555-OLD')
+    expect(show).toContain('+1 212 555 1234')
+    expect(show).not.toContain('+1 310 555 9876')
   })
 })
 
@@ -208,6 +208,59 @@ describe('company rm', () => {
     ctx.runOK('company', 'rm', coID, '--force')
     const show = ctx.runOK('contact', 'show', ctID)
     expect(show).toContain('Jane')
+  })
+})
+
+describe('company phone normalization', () => {
+  test('various formats normalize to same E.164', () => {
+    const ctx = createTestContext()
+    ctx.runOK('company', 'add', '--name', 'Acme Corp', '--phone', '+1-212-555-1234')
+
+    const show1 = ctx.runOK('company', 'show', '+12125551234')
+    const show2 = ctx.runOK('company', 'show', '+1-212-555-1234')
+    expect(show1).toContain('Acme Corp')
+    expect(show2).toContain('Acme Corp')
+  })
+
+  test('phones stored as E.164 in JSON output', () => {
+    const ctx = createTestContext()
+    ctx.runOK('company', 'add', '--name', 'Acme Corp', '--phone', '+44 20 7946 0958')
+
+    const companies = ctx.runJSON<Array<{ phones: string[] }>>('company', 'list', '--format', 'json')
+    expect(companies[0].phones[0]).toBe('+442079460958')
+  })
+
+  test('duplicate detection across formats', () => {
+    const ctx = createTestContext()
+    ctx.runOK('company', 'add', '--name', 'Acme Corp', '--phone', '+1-212-555-1234')
+
+    const result = ctx.runFail('company', 'add', '--name', 'Other Corp', '--phone', '(212) 555-1234')
+    expect(result.stderr).toContain('duplicate')
+  })
+
+  test('invalid phone rejected', () => {
+    const ctx = createTestContext()
+    const result = ctx.runFail('company', 'add', '--name', 'Acme', '--phone', 'not-a-number')
+    expect(result.stderr).toContain('invalid')
+  })
+
+  test('rm-phone matches across formats', () => {
+    const ctx = createTestContext()
+    const id = ctx.runOK('company', 'add', '--name', 'Acme', '--phone', '+1-212-555-1234', '--phone', '+44-20-7946-0958').trim()
+
+    ctx.runOK('company', 'edit', id, '--rm-phone', '+12125551234')
+
+    const companies = ctx.runJSON<Array<{ phones: string[] }>>('company', 'list', '--format', 'json')
+    expect(companies[0].phones).toHaveLength(1)
+    expect(companies[0].phones[0]).toBe('+442079460958')
+  })
+
+  test('add-phone rejects duplicate in different format', () => {
+    const ctx = createTestContext()
+    const id = ctx.runOK('company', 'add', '--name', 'Acme', '--phone', '+1-212-555-1234').trim()
+
+    const result = ctx.runFail('company', 'edit', id, '--add-phone', '(212) 555-1234')
+    expect(result.stderr).toContain('duplicate')
   })
 })
 
