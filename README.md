@@ -6,6 +6,7 @@ A headless, CLI-first CRM. Your contacts, deals, and pipeline in a single SQLite
 crm contact add --name "Jane Doe" --email jane@acme.com
 crm deal list --stage qualified --format json | jq '.[] | .value'
 crm find "that fintech CTO from London"
+crm dupes
 crm report pipeline
 ```
 
@@ -186,7 +187,7 @@ Prompts for confirmation unless `--force` is passed. Removes the contact and unl
 crm contact merge ct_01J8Z... ct_02K9A...
 ```
 
-Merges two contacts. Keeps the first, absorbs data from the second. Emails, phones, tags, custom fields, and activity history are combined. Prompts to resolve conflicts (e.g. different names) unless `--keep-first` is passed.
+Merges two contacts. Keeps the first, absorbs data from the second. Emails, phones, tags, custom fields, and activity history are combined. Deals and company links on the second contact are relinked to the first. Prompts to resolve conflicts (e.g. different names) unless `--keep-first` is passed.
 
 ---
 
@@ -204,7 +205,7 @@ crm company add --name "Acme Corp" --domain acme.com --domain acme.co.uk --phone
 | Flag | Required | Description |
 |------|----------|-------------|
 | `--name` | yes | Company name |
-| `--domain` | no | Website domain (repeatable — multiple allowed) |
+| `--website` | no | Website URL (repeatable — multiple allowed) |
 | `--phone` | no | Phone number (repeatable — multiple allowed) |
 | `--tag` | no | Tag (repeatable — multiple allowed) |
 | `--set` | no | Custom field `key=value` (repeatable — multiple allowed) |
@@ -219,29 +220,29 @@ crm company list --tag enterprise --sort name
 
 Same filtering/sorting flags as `crm contact list`.
 
-#### `crm company show <id-or-domain-or-phone>`
+#### `crm company show <id-or-website-or-phone>`
 
 ```bash
-crm company show acme.com
+crm company show https://acme.com
 crm company show co_01J8Z...
 crm company show "+1-212-555-1234"
 ```
 
-Accepts ID, any domain, or any phone number. Shows company details plus all linked contacts and deals.
+Accepts ID, any website URL/host, or any phone number. Shows company details plus all linked contacts and deals.
 
-#### `crm company edit <id-or-domain-or-phone>`
+#### `crm company edit <id-or-website-or-phone>`
 
 ```bash
-crm company edit acme.com --name "Acme Inc" --set industry=Fintech
-crm company edit co_01J8Z... --add-domain acme.co.uk --add-phone "+44-20-7946-0958"
-crm company edit acme.com --rm-domain old-acme.com --rm-phone "+1-415-555-0000"
+crm company edit https://acme.com --name "Acme Inc" --set industry=Fintech
+crm company edit co_01J8Z... --add-website https://acme.co.uk --add-phone "+44-20-7946-0958"
+crm company edit https://acme.com --rm-website https://old-acme.com --rm-phone "+1-415-555-0000"
 ```
 
 | Flag | Description |
 |------|-------------|
 | `--name` | Update name |
-| `--add-domain` | Add a domain |
-| `--rm-domain` | Remove a domain |
+| `--add-website` | Add a website URL |
+| `--rm-website` | Remove a website URL |
 | `--add-phone` | Add a phone number |
 | `--rm-phone` | Remove a phone number |
 | `--set` | Set custom field `key=value` |
@@ -249,9 +250,17 @@ crm company edit acme.com --rm-domain old-acme.com --rm-phone "+1-415-555-0000"
 | `--add-tag` | Add tag |
 | `--rm-tag` | Remove tag |
 
-#### `crm company rm <id-or-domain-or-phone>`
+#### `crm company rm <id-or-website-or-phone>`
 
 Same pattern as `crm contact rm`. Unlinks contacts and deals but does not delete them.
+
+#### `crm company merge <id> <id>`
+
+```bash
+crm company merge co_01J8Z... co_02K9A...
+```
+
+Merges two companies. Keeps the first, absorbs data from the second. Websites, phones, tags, and custom fields are combined. All contacts and deals linked to the second company are relinked to the first. Prompts to resolve conflicts (e.g. different names) unless `--keep-first` is passed.
 
 ---
 
@@ -263,7 +272,7 @@ Pipeline tracking for opportunities.
 
 ```bash
 crm deal add --title "Acme Enterprise" --value 50000
-crm deal add --title "Acme Enterprise" --value 50000 --stage qualified --contact jane@acme.com --company acme.com --expected-close 2026-06-01 --probability 60 --tag q2
+crm deal add --title "Acme Enterprise" --value 50000 --stage qualified --contact jane@acme.com --company https://acme.com --expected-close 2026-06-01 --probability 60 --tag q2
 ```
 
 | Flag | Required | Description |
@@ -272,7 +281,7 @@ crm deal add --title "Acme Enterprise" --value 50000 --stage qualified --contact
 | `--value` | no | Deal value in dollars (integer) |
 | `--stage` | no | Pipeline stage (default: first configured stage) |
 | `--contact` | no | Link contact by ID or email (multiple allowed) |
-| `--company` | no | Link company by ID or domain |
+| `--company` | no | Link company by ID or website |
 | `--expected-close` | no | Expected close date (`YYYY-MM-DD`) |
 | `--probability` | no | Win probability 0-100 |
 | `--tag` | no | Tag (multiple allowed) |
@@ -285,7 +294,7 @@ crm deal list
 crm deal list --stage qualified
 crm deal list --stage qualified --sort value --reverse
 crm deal list --contact jane@acme.com
-crm deal list --company acme.com
+crm deal list --company https://acme.com
 crm deal list --min-value 10000 --max-value 100000
 ```
 
@@ -434,6 +443,30 @@ crm search "enterprise plan" --format json
 | Flag | Description |
 |------|-------------|
 | `--type` | Restrict to entity types: `contact`, `company`, `deal`, `activity` |
+
+#### `crm dupes`
+
+Find likely duplicate entities using fuzzy matching on string fields. This is a review command for agents and operators — it suggests suspicious pairs, but does not merge anything.
+
+```bash
+crm dupes
+crm dupes --type contact
+crm dupes --type company --format json
+crm dupes --limit 20
+```
+
+Typical signals:
+- similar contact names with different emails
+- similar company names with different websites
+- same contact name + same company name
+
+| Flag | Description |
+|------|-------------|
+| `--type` | Restrict to `contact` or `company` |
+| `--limit` | Max results (default: 50) |
+| `--threshold` | Minimum similarity score 0.0-1.0 |
+
+Output includes both candidate entities plus the reasons they were flagged. Exact duplicates already prevented by uniqueness constraints (for example email / phone) should not appear here.
 
 #### `crm find <query>`
 
@@ -651,7 +684,7 @@ Only a small set of fields are hard-coded per entity — everything else lives i
 | Entity | Hard-coded fields | Everything else → `custom_fields` |
 |--------|-------------------|-----------------------------------|
 | Contact | `name`, `emails[]`, `phones[]`, `company`, `tags[]` | title, source, linkedin, notes, ... |
-| Company | `name`, `domains[]`, `phones[]`, `tags[]` | industry, size, website, founded, ... |
+| Company | `name`, `websites[]`, `phones[]`, `tags[]` | industry, size, founded, ... |
 | Deal | `title`, `value`, `stage`, `contacts[]`, `company`, `expected_close`, `probability`, `tags[]` | source, channel, priority, ... |
 | Activity | `type`, `entity_ref`, `note`, `deal`, `at` | duration, outcome, attendees, ... |
 
@@ -719,6 +752,55 @@ display = "international"
 
 ---
 
+## Domain Normalization
+
+Company domains are normalized on input for consistent storage, deduplication, and lookup:
+
+- Strip protocol (`https://`, `http://`)
+- Strip `www.` prefix
+- Lowercase
+- Strip trailing slash and path
+
+```bash
+crm company add --name "Acme" --domain "https://www.Acme.com/about"
+# Stored as: acme.com
+```
+
+**Dedup:** Exact match after normalization = duplicate. The same normalized domain cannot belong to two different companies:
+
+```bash
+crm company add --name "Acme Corp" --domain "acme.com"
+crm company add --name "Acme Inc" --domain "www.acme.com"    # fails: duplicate domain
+```
+
+**Subdomains are distinct.** Subsidiaries or regional offices often use subdomains of a shared root domain. These are treated as separate domains — not collapsed:
+
+```bash
+crm company add --name "Acme US" --domain "us.acme.com"
+crm company add --name "Acme EU" --domain "eu.acme.com"      # allowed — different subdomain
+crm company add --name "Acme Global" --domain "acme.com"     # allowed — root domain is distinct
+```
+
+**Different TLDs are distinct:**
+
+```bash
+crm company add --name "Acme Corp" --domain "acme.com"
+crm company add --name "Acme UK" --domain "acme.co.uk"       # allowed — different TLD
+```
+
+**Lookup:** Any input format resolves to the normalized domain:
+
+```bash
+crm company show "https://www.acme.com"    # finds acme.com
+crm company show "ACME.COM"                # finds acme.com
+```
+
+Uses [`normalize-url`](https://github.com/sindresorhus/normalize-url) for robust URL/domain normalization.
+
+**FUSE:** `_by-website/` symlinks use the normalized form (`acme.com.json`, not `www.acme.com.json`).
+
+---
+
 ## Filtering
 
 The `--filter` flag accepts expressions:
@@ -770,7 +852,7 @@ All entities use prefixed ULID-based IDs:
 | Deal | `dl_` | `dl_01J8ZVXB3K...` |
 | Activity | `ac_` | `ac_01J8ZVXB3K...` |
 
-Commands that accept an entity reference also accept email or phone (contacts), or domain or phone (companies) as shortcuts.
+Commands that accept an entity reference also accept email or phone (contacts), or website URL/host or phone (companies) as shortcuts.
 
 ---
 
@@ -811,7 +893,7 @@ The mount point stays live — changes made via the CLI or filesystem are reflec
 │           └── ct_01J8Z...jane-doe.json → ../../ct_01J8Z...jane-doe.json
 ├── companies/
 │   ├── co_01J8Z...acme-corp.json
-│   ├── _by-domain/
+│   ├── _by-website/
 │   │   ├── acme.com.json → ../co_01J8Z...acme-corp.json
 │   │   └── acme.co.uk.json → ../co_01J8Z...acme-corp.json
 │   ├── _by-phone/                         # E.164 filenames
@@ -1017,6 +1099,7 @@ search_limit = 20               # max results for search/ virtual files
 - **Language:** TypeScript (strict mode)
 - **Database:** SQLite via [libSQL](https://github.com/tursodatabase/libsql) + [Drizzle ORM](https://orm.drizzle.team)
 - **Phone normalization:** [libphonenumber-js](https://gitlab.com/nicolo-ribaudo/libphonenumber-js) (E.164)
+- **Domain normalization:** [normalize-url](https://github.com/sindresorhus/normalize-url)
 - **Validation:** [Zod](https://zod.dev)
 - **Linting:** [Biome](https://biomejs.dev) via [Ultracite](https://github.com/haydenbleasel/ultracite)
 - **Testing:** `bun test` (functional tests at the CLI level)

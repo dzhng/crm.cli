@@ -449,4 +449,80 @@ describe('contact merge', () => {
 
     ctx.runFail('contact', 'show', id2)
   })
+
+  test('merge combines phones', () => {
+    const ctx = createTestContext()
+    const id1 = ctx.runOK('contact', 'add', '--name', 'Jane', '--phone', '+1-212-555-1234').trim()
+    const id2 = ctx.runOK('contact', 'add', '--name', 'J. Doe', '--phone', '+44-20-7946-0958').trim()
+
+    ctx.runOK('contact', 'merge', id1, id2, '--keep-first')
+
+    const contacts = ctx.runJSON<Array<{ phones: string[] }>>('contact', 'list', '--format', 'json')
+    expect(contacts[0].phones).toHaveLength(2)
+  })
+
+  test('merge transfers deals to surviving contact', () => {
+    const ctx = createTestContext()
+    const id1 = ctx.runOK('contact', 'add', '--name', 'Jane', '--email', 'jane@acme.com').trim()
+    const id2 = ctx.runOK('contact', 'add', '--name', 'J. Doe', '--email', 'jane.doe@gmail.com').trim()
+    ctx.runOK('deal', 'add', '--title', 'Big Deal', '--contact', 'jane.doe@gmail.com')
+
+    ctx.runOK('contact', 'merge', id1, id2, '--keep-first')
+
+    // Deal should now be linked to surviving contact
+    const deals = ctx.runJSON<unknown[]>('deal', 'list', '--contact', 'jane@acme.com', '--format', 'json')
+    expect(deals).toHaveLength(1)
+  })
+
+  test('merge transfers activities to surviving contact', () => {
+    const ctx = createTestContext()
+    const id1 = ctx.runOK('contact', 'add', '--name', 'Jane', '--email', 'jane@acme.com').trim()
+    const id2 = ctx.runOK('contact', 'add', '--name', 'J. Doe', '--email', 'jane.doe@gmail.com').trim()
+    ctx.runOK('log', 'note', 'jane.doe@gmail.com', 'Activity on the old record')
+
+    ctx.runOK('contact', 'merge', id1, id2, '--keep-first')
+
+    // Activity should be linked to surviving contact
+    const activities = ctx.runJSON<unknown[]>('activity', 'list', '--contact', 'jane@acme.com', '--format', 'json')
+    expect(activities).toHaveLength(1)
+  })
+
+  test('merge combines custom fields', () => {
+    const ctx = createTestContext()
+    const id1 = ctx.runOK('contact', 'add', '--name', 'Jane', '--set', 'title=CTO').trim()
+    const id2 = ctx.runOK('contact', 'add', '--name', 'J. Doe', '--set', 'linkedin=linkedin.com/in/jdoe').trim()
+
+    ctx.runOK('contact', 'merge', id1, id2, '--keep-first')
+
+    const show = ctx.runOK('contact', 'show', id1)
+    expect(show).toContain('CTO')
+    expect(show).toContain('linkedin.com/in/jdoe')
+  })
+})
+
+describe('contact merge', () => {
+  test('relinks deals from second contact to first', () => {
+    const ctx = createTestContext()
+    const first = ctx.runOK('contact', 'add', '--name', 'Jane Doe', '--email', 'jane@acme.com').trim()
+    const second = ctx.runOK('contact', 'add', '--name', 'J. Doe', '--email', 'jane.personal@gmail.com').trim()
+    const deal = ctx.runOK('deal', 'add', '--title', 'Big Deal', '--contact', second).trim()
+
+    ctx.runOK('contact', 'merge', first, second, '--keep-first')
+
+    const show = ctx.runOK('deal', 'show', deal)
+    expect(show).toContain(first)
+    expect(show).not.toContain(second)
+  })
+
+  test('preserves company link when merging duplicate contacts', () => {
+    const ctx = createTestContext()
+    ctx.runOK('company', 'add', '--name', 'Acme Corp', '--domain', 'acme.com')
+    const first = ctx.runOK('contact', 'add', '--name', 'Jane Doe', '--email', 'jane@acme.com', '--company', 'Acme Corp').trim()
+    const second = ctx.runOK('contact', 'add', '--name', 'J. Doe', '--email', 'jane.personal@gmail.com').trim()
+
+    ctx.runOK('contact', 'merge', first, second, '--keep-first')
+
+    const show = ctx.runOK('contact', 'show', first)
+    expect(show).toContain('Acme Corp')
+  })
 })
