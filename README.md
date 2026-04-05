@@ -87,6 +87,8 @@ path = "~/.crm/crm.db"
 
 [pipeline]
 stages = ["lead", "qualified", "proposal", "negotiation", "closed-won", "closed-lost"]
+won_stage = "closed-won"
+lost_stage = "closed-lost"
 
 [defaults]
 format = "table"    # table | json | csv | tsv | ids
@@ -94,6 +96,17 @@ format = "table"    # table | json | csv | tsv | ids
 [phone]
 default_country = "US"    # ISO 3166-1 alpha-2; for numbers without country code
 display = "international" # international | national | e164
+
+[hooks]
+# pre-contact-add = "echo 'adding contact'"
+# post-contact-add = "echo 'contact added'"
+# pre-deal-stage-change = "echo 'stage changing'"
+
+[mount]
+default_path = "~/crm"          # where `crm mount` mounts by default
+readonly = false                 # set true to prevent writes via FUSE
+max_recent_activity = 10         # activities shown per entity in FUSE
+search_limit = 20                # max results from search/find
 
 EOF
 ```

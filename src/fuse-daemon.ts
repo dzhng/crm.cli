@@ -1341,7 +1341,7 @@ async function writeDeal(
         type: 'stage-change',
         body: `from ${existing[0].stage} to ${data.stage}`,
         deal: id,
-        contact: null,
+        contacts: '[]',
         company: null,
         custom_fields: '{}',
         created_at: now,

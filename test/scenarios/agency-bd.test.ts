@@ -172,7 +172,7 @@ Nina Patel,nina@healthbridge.org,HealthBridge,"champion,technical",Lead Architec
       )
       .trim()
 
-    const _dealPay = ctx
+    ctx
       .runOK(
         'deal',
         'add',
