@@ -217,6 +217,30 @@ describe('report conversion', () => {
     )
     expect(report.length).toBeGreaterThan(0)
   })
+
+  test('--since filters to recent transitions', () => {
+    const ctx = createTestContext()
+    // Create deals and move them
+    const d1 = ctx
+      .runOK('deal', 'add', '--title', 'Recent', '--stage', 'lead')
+      .trim()
+    ctx.runOK('deal', 'move', d1, '--stage', 'qualified')
+
+    // Use a future date as --since to filter everything out
+    const report = ctx.runJSON<
+      Array<{ stage: string; entered: number; advanced: number }>
+    >('report', 'conversion', '--since', '2099-01-01', '--format', 'json')
+    const lead = report.find((r) => r.stage === 'lead')
+    expect(lead!.entered).toBe(0)
+    expect(lead!.advanced).toBe(0)
+
+    // Use a past date to include everything
+    const reportAll = ctx.runJSON<
+      Array<{ stage: string; entered: number; advanced: number }>
+    >('report', 'conversion', '--since', '2020-01-01', '--format', 'json')
+    const leadAll = reportAll.find((r) => r.stage === 'lead')
+    expect(leadAll!.entered).toBeGreaterThanOrEqual(1)
+  })
 })
 
 describe('report velocity', () => {
@@ -231,6 +255,42 @@ describe('report velocity', () => {
     const out = ctx.runOK('report', 'velocity')
     expect(out).toContain('lead')
     expect(out).toContain('qualified')
+  })
+
+  test('--won-only filters to won deals only', () => {
+    const ctx = createTestContext()
+    const won = ctx
+      .runOK('deal', 'add', '--title', 'Won Deal', '--stage', 'lead')
+      .trim()
+    ctx.runOK('deal', 'move', won, '--stage', 'qualified')
+    ctx.runOK('deal', 'move', won, '--stage', 'closed-won')
+
+    const lost = ctx
+      .runOK('deal', 'add', '--title', 'Lost Deal', '--stage', 'lead')
+      .trim()
+    ctx.runOK('deal', 'move', lost, '--stage', 'qualified')
+    ctx.runOK('deal', 'move', lost, '--stage', 'closed-lost')
+
+    // Without --won-only: both deals counted
+    const all = ctx.runJSON<Array<{ stage: string; deals: number }>>(
+      'report',
+      'velocity',
+      '--format',
+      'json',
+    )
+    const leadAll = all.find((s) => s.stage === 'lead')
+    expect(leadAll!.deals).toBe(2)
+
+    // With --won-only: only won deal counted
+    const wonOnly = ctx.runJSON<Array<{ stage: string; deals: number }>>(
+      'report',
+      'velocity',
+      '--won-only',
+      '--format',
+      'json',
+    )
+    const leadWon = wonOnly.find((s) => s.stage === 'lead')
+    expect(leadWon!.deals).toBe(1)
   })
 })
 

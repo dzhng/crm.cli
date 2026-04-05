@@ -489,6 +489,146 @@ describe('deal edit', () => {
     expect(show).toContain('New Title')
     expect(show).toContain('20000')
   })
+
+  test('update company', () => {
+    const ctx = createTestContext()
+    ctx.runOK('company', 'add', '--name', 'OldCo', '--website', 'oldco.com')
+    ctx.runOK('company', 'add', '--name', 'NewCo', '--website', 'newco.com')
+    const id = ctx
+      .runOK('deal', 'add', '--title', 'Switch Co', '--company', 'oldco.com')
+      .trim()
+
+    ctx.runOK('deal', 'edit', id, '--company', 'newco.com')
+
+    const deal = ctx.runJSON<{ company: { id: string; name: string } }>(
+      'deal',
+      'show',
+      id,
+      '--format',
+      'json',
+    )
+    expect(deal.company.name).toBe('NewCo')
+  })
+
+  test('update expected-close', () => {
+    const ctx = createTestContext()
+    const id = ctx
+      .runOK(
+        'deal',
+        'add',
+        '--title',
+        'Date Deal',
+        '--expected-close',
+        '2026-06-01',
+      )
+      .trim()
+
+    ctx.runOK('deal', 'edit', id, '--expected-close', '2026-09-15')
+
+    const deal = ctx.runJSON<{ expected_close: string }>(
+      'deal',
+      'show',
+      id,
+      '--format',
+      'json',
+    )
+    expect(deal.expected_close).toBe('2026-09-15')
+  })
+
+  test('update probability', () => {
+    const ctx = createTestContext()
+    const id = ctx
+      .runOK('deal', 'add', '--title', 'Prob Deal', '--probability', '25')
+      .trim()
+
+    ctx.runOK('deal', 'edit', id, '--probability', '75')
+
+    const deal = ctx.runJSON<{ probability: number }>(
+      'deal',
+      'show',
+      id,
+      '--format',
+      'json',
+    )
+    expect(deal.probability).toBe(75)
+  })
+
+  test('update custom fields via --set and --unset', () => {
+    const ctx = createTestContext()
+    const id = ctx
+      .runOK('deal', 'add', '--title', 'CF Deal', '--set', 'source=inbound')
+      .trim()
+
+    ctx.runOK(
+      'deal',
+      'edit',
+      id,
+      '--set',
+      'source=referral',
+      '--set',
+      'priority=high',
+    )
+
+    const deal = ctx.runJSON<{ custom_fields: Record<string, string> }>(
+      'deal',
+      'show',
+      id,
+      '--format',
+      'json',
+    )
+    expect(deal.custom_fields.source).toBe('referral')
+    expect(deal.custom_fields.priority).toBe('high')
+
+    ctx.runOK('deal', 'edit', id, '--unset', 'priority')
+    const deal2 = ctx.runJSON<{ custom_fields: Record<string, string> }>(
+      'deal',
+      'show',
+      id,
+      '--format',
+      'json',
+    )
+    expect(deal2.custom_fields.priority).toBeUndefined()
+    expect(deal2.custom_fields.source).toBe('referral')
+  })
+
+  test('add and remove tags', () => {
+    const ctx = createTestContext()
+    const id = ctx
+      .runOK('deal', 'add', '--title', 'Tag Deal', '--tag', 'q2')
+      .trim()
+
+    ctx.runOK(
+      'deal',
+      'edit',
+      id,
+      '--add-tag',
+      'enterprise',
+      '--add-tag',
+      'urgent',
+    )
+
+    const deal = ctx.runJSON<{ tags: string[] }>(
+      'deal',
+      'show',
+      id,
+      '--format',
+      'json',
+    )
+    expect(deal.tags).toContain('q2')
+    expect(deal.tags).toContain('enterprise')
+    expect(deal.tags).toContain('urgent')
+
+    ctx.runOK('deal', 'edit', id, '--rm-tag', 'q2')
+    const deal2 = ctx.runJSON<{ tags: string[] }>(
+      'deal',
+      'show',
+      id,
+      '--format',
+      'json',
+    )
+    expect(deal2.tags).not.toContain('q2')
+    expect(deal2.tags).toContain('enterprise')
+  })
 })
 
 describe('deal rm', () => {
