@@ -590,6 +590,114 @@ describe('contact list', () => {
   })
 })
 
+describe('email validation', () => {
+  test('rejects email without @', () => {
+    const ctx = createTestContext()
+    const result = ctx.runFail(
+      'contact',
+      'add',
+      '--name',
+      'Bad Email',
+      '--email',
+      'notanemail',
+    )
+    expect(result.stderr).toContain('invalid email')
+  })
+
+  test('rejects email starting with @', () => {
+    const ctx = createTestContext()
+    const result = ctx.runFail(
+      'contact',
+      'add',
+      '--name',
+      'Bad Email',
+      '--email',
+      '@missing-local',
+    )
+    expect(result.stderr).toContain('invalid email')
+  })
+
+  test('rejects email ending with @', () => {
+    const ctx = createTestContext()
+    const result = ctx.runFail(
+      'contact',
+      'add',
+      '--name',
+      'Bad Email',
+      '--email',
+      'missing-domain@',
+    )
+    expect(result.stderr).toContain('invalid email')
+  })
+
+  test('edit rejects invalid email', () => {
+    const ctx = createTestContext()
+    const id = ctx.runOK('contact', 'add', '--name', 'Jane').trim()
+    const result = ctx.runFail(
+      'contact',
+      'edit',
+      id,
+      '--add-email',
+      'notanemail',
+    )
+    expect(result.stderr).toContain('invalid email')
+  })
+})
+
+describe('input trimming', () => {
+  test('trims whitespace from name', () => {
+    const ctx = createTestContext()
+    const id = ctx
+      .runOK(
+        'contact',
+        'add',
+        '--name',
+        '  Jane Doe  ',
+        '--email',
+        'jane@acme.com',
+      )
+      .trim()
+    const data = ctx.runJSON<{ name: string }>(
+      'contact',
+      'show',
+      id,
+      '--format',
+      'json',
+    )
+    expect(data.name).toBe('Jane Doe')
+  })
+
+  test('trims whitespace from email', () => {
+    const ctx = createTestContext()
+    const id = ctx
+      .runOK('contact', 'add', '--name', 'Jane', '--email', '  jane@acme.com  ')
+      .trim()
+    const data = ctx.runJSON<{ emails: string[] }>(
+      'contact',
+      'show',
+      id,
+      '--format',
+      'json',
+    )
+    expect(data.emails[0]).toBe('jane@acme.com')
+  })
+
+  test('trims whitespace from tags', () => {
+    const ctx = createTestContext()
+    const id = ctx
+      .runOK('contact', 'add', '--name', 'Jane', '--tag', '  vip  ')
+      .trim()
+    const data = ctx.runJSON<{ tags: string[] }>(
+      'contact',
+      'show',
+      id,
+      '--format',
+      'json',
+    )
+    expect(data.tags[0]).toBe('vip')
+  })
+})
+
 describe('contact edit', () => {
   test('update fields by ID', () => {
     const ctx = createTestContext()

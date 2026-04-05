@@ -29,8 +29,17 @@ export function registerLogCommand(program: Command) {
     .option('--deal <ref>', 'Link to deal')
     .option('--at <date>', 'Custom timestamp')
     .option('--set <kv>', 'Custom field', collect, [])
-    .action(async (type, body, opts) => {
+    .action(async (rawType, rawBody, opts) => {
       const { db, config } = await getCtx()
+      const type = rawType.trim()
+      const body = rawBody.trim()
+      opts.contact = opts.contact.map((c: string) => c.trim())
+      if (opts.company) {
+        opts.company = opts.company.trim()
+      }
+      if (opts.deal) {
+        opts.deal = opts.deal.trim()
+      }
       if (!VALID_TYPES.includes(type)) {
         die(
           `Error: invalid activity type "${type}". Must be one of: ${VALID_TYPES.join(', ')}`,

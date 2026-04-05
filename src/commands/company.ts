@@ -39,6 +39,10 @@ export function registerCompanyCommands(program: Command) {
     .option('--set <kv>', 'Custom field', collect, [])
     .action(async (opts) => {
       const { db, config } = await getCtx()
+      opts.name = opts.name.trim()
+      opts.website = opts.website.map((w: string) => w.trim())
+      opts.phone = opts.phone.map((p: string) => p.trim())
+      opts.tag = opts.tag.map((t: string) => t.trim())
       const cid = makeId('co')
       const n = now()
       const websites: string[] = []
@@ -161,7 +165,16 @@ export function registerCompanyCommands(program: Command) {
     .option('--unset <key>', '', collect, [])
     .action(async (ref, opts) => {
       const { db, config } = await getCtx()
-      const co = await resolveCompany(db, ref, config)
+      if (opts.name) {
+        opts.name = opts.name.trim()
+      }
+      opts.addWebsite = opts.addWebsite.map((w: string) => w.trim())
+      opts.rmWebsite = opts.rmWebsite.map((w: string) => w.trim())
+      opts.addPhone = opts.addPhone.map((p: string) => p.trim())
+      opts.rmPhone = opts.rmPhone.map((p: string) => p.trim())
+      opts.addTag = opts.addTag.map((t: string) => t.trim())
+      opts.rmTag = opts.rmTag.map((t: string) => t.trim())
+      const co = await resolveCompany(db, ref.trim(), config)
       if (!co) {
         die(`Error: company not found: ${ref}`)
       }

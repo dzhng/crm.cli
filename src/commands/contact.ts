@@ -21,6 +21,7 @@ import {
   now,
   parseKV,
   showEntity,
+  validateEmail,
 } from '../lib/helpers'
 import {
   normalizePhone,
@@ -46,9 +47,15 @@ export function registerContactCommands(program: Command) {
     .option('--set <kv>', 'Custom field', collect, [])
     .action(async (opts) => {
       const { db, config } = await getCtx()
+      opts.name = opts.name.trim()
+      opts.email = opts.email.map((e: string) => e.trim())
+      opts.phone = opts.phone.map((p: string) => p.trim())
+      opts.company = opts.company.map((c: string) => c.trim())
+      opts.tag = opts.tag.map((t: string) => t.trim())
       const cid = makeId('ct')
       const n = now()
       for (const e of opts.email) {
+        validateEmail(e)
         await checkDupeEmail(db, e)
       }
       const phones: string[] = []
@@ -228,7 +235,18 @@ export function registerContactCommands(program: Command) {
     .option('--unset <key>', '', collect, [])
     .action(async (ref, opts) => {
       const { db, config } = await getCtx()
-      const c = await resolveContact(db, ref, config)
+      if (opts.name) {
+        opts.name = opts.name.trim()
+      }
+      opts.addEmail = opts.addEmail.map((e: string) => e.trim())
+      opts.rmEmail = opts.rmEmail.map((e: string) => e.trim())
+      opts.addPhone = opts.addPhone.map((p: string) => p.trim())
+      opts.rmPhone = opts.rmPhone.map((p: string) => p.trim())
+      opts.addCompany = opts.addCompany.map((c: string) => c.trim())
+      opts.rmCompany = opts.rmCompany.map((c: string) => c.trim())
+      opts.addTag = opts.addTag.map((t: string) => t.trim())
+      opts.rmTag = opts.rmTag.map((t: string) => t.trim())
+      const c = await resolveContact(db, ref.trim(), config)
       if (!c) {
         die(`Error: contact not found: ${ref}`)
       }
@@ -246,6 +264,7 @@ export function registerContactCommands(program: Command) {
         name = opts.name
       }
       for (const e of opts.addEmail) {
+        validateEmail(e)
         await checkDupeEmail(db, e, c.id)
         if (!emails.includes(e)) {
           emails.push(e)

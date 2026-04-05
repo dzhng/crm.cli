@@ -84,8 +84,12 @@ export function registerImportExportCommands(program: Command) {
             }
             die('Error: row missing name')
           }
-          const name = rec.name || ''
+          const name = (rec.name || '').trim()
           const emails = splitField(rec.email || rec.emails)
+            .map((e) => e.trim())
+            .filter(
+              (e) => e.includes('@') && !e.startsWith('@') && !e.endsWith('@'),
+            )
           const phones = splitField(rec.phone || rec.phones)
             .map((p) => {
               const n = tryNormalizePhone(p, config.phone.default_country)

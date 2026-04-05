@@ -159,6 +159,12 @@ export async function getOrCreateContactId(
   return cid
 }
 
+export function validateEmail(email: string): void {
+  if (!email.includes('@') || email.startsWith('@') || email.endsWith('@')) {
+    die(`Error: invalid email "${email}" — must contain @`)
+  }
+}
+
 export async function checkDupeEmail(
   db: DB,
   email: string,

@@ -43,6 +43,15 @@ export function registerDealCommands(program: Command) {
     .option('--set <kv>', 'Custom field', collect, [])
     .action(async (opts) => {
       const { db, config } = await getCtx()
+      opts.title = opts.title.trim()
+      opts.contact = opts.contact.map((c: string) => c.trim())
+      opts.tag = opts.tag.map((t: string) => t.trim())
+      if (opts.company) {
+        opts.company = opts.company.trim()
+      }
+      if (opts.stage) {
+        opts.stage = opts.stage.trim()
+      }
       const id = makeId('dl')
       const n = now()
       if (opts.value !== undefined && Number(opts.value) < 0) {
@@ -246,7 +255,17 @@ export function registerDealCommands(program: Command) {
     .option('--unset <key>', '', collect, [])
     .action(async (ref, opts) => {
       const { db, config } = await getCtx()
-      const d = await resolveDeal(db, ref)
+      if (opts.title) {
+        opts.title = opts.title.trim()
+      }
+      if (opts.company) {
+        opts.company = opts.company.trim()
+      }
+      opts.addContact = opts.addContact.map((c: string) => c.trim())
+      opts.rmContact = opts.rmContact.map((c: string) => c.trim())
+      opts.addTag = opts.addTag.map((t: string) => t.trim())
+      opts.rmTag = opts.rmTag.map((t: string) => t.trim())
+      const d = await resolveDeal(db, ref.trim())
       if (!d) {
         die(`Error: deal not found: ${ref}`)
       }
