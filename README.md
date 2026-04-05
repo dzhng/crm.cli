@@ -104,8 +104,6 @@ format = "table"    # table | json | csv | tsv | ids
 default_country = "US"    # ISO 3166-1 alpha-2; for numbers without country code
 display = "international" # international | national | e164
 
-[search]
-model = "all-MiniLM-L6-v2"    # local embedding model
 EOF
 ```
 
@@ -556,7 +554,7 @@ crm find "everyone I met at the conference last month"
 crm find "companies in the healthcare space"
 ```
 
-Uses a local embedding model (`all-MiniLM-L6-v2` via ONNX) — no API keys, no network calls. The model (~80MB) downloads on first use and caches at `~/.crm/models/`.
+Uses a local embedding model (`mxbai-embed-xsmall-v1` via ONNX) — no API keys, no network calls. The model downloads on first use and caches at `~/.crm/models/`.
 
 | Flag | Description |
 |------|-------------|

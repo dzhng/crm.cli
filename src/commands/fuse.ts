@@ -1,4 +1,4 @@
-import { spawnSync } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import {
   copyFileSync,
   existsSync,
@@ -576,21 +576,22 @@ export function registerFuseCommands(program: Command) {
         }
       }
 
-      // Start the TS FUSE daemon
+      // Start the TS FUSE daemon (detached so the CLI can exit)
       const socketPath = join(homedir(), '.crm', `fuse-${slugify(mp)}.sock`)
       const daemonPath = join(import.meta.dir, '..', 'fuse-daemon.ts')
 
-      const daemonProc = Bun.spawn(
+      const daemonProc = spawn(
+        'bun',
         [
-          'bun',
           'run',
           daemonPath,
           socketPath,
           config.database.path,
           ...config.pipeline.stages,
         ],
-        { stdio: ['pipe', 'pipe', 'pipe'] },
+        { stdio: 'ignore', detached: true },
       )
+      daemonProc.unref()
 
       // Wait for daemon socket
       const deadline = Date.now() + 5000
@@ -605,29 +606,31 @@ export function registerFuseCommands(program: Command) {
         die('Error: FUSE daemon failed to start.')
       }
 
-      // Spawn the FUSE helper
-      const args = ['-f', mp, '--', socketPath]
+      // Spawn the FUSE helper (detached so the CLI can exit)
+      const fuseArgs = ['-f', mp, '--', socketPath]
       if (opts.readonly || config.mount.readonly) {
-        args.unshift('-o', 'ro')
+        fuseArgs.unshift('-o', 'ro')
       }
 
-      const proc = Bun.spawn([helperPath, ...args], {
-        stdio: ['pipe', 'pipe', 'pipe'],
+      const fuseProc = spawn(helperPath, fuseArgs, {
+        stdio: 'ignore',
+        detached: true,
       })
+      fuseProc.unref()
 
       // Wait briefly for mount to succeed
       await new Promise((resolve) => setTimeout(resolve, 500))
 
-      if (proc.exitCode !== null) {
+      if (fuseProc.exitCode !== null) {
         daemonProc.kill()
         die('Error: FUSE mount failed. Is FUSE available?')
       }
 
-      // Write PID files for unmount
+      // Write PID file for unmount
       const pidFile = join(homedir(), '.crm', `mount-${slugify(mp)}.pid`)
-      writeFileSync(pidFile, `${proc.pid}\n${daemonProc.pid}`)
+      writeFileSync(pidFile, `${fuseProc.pid}\n${daemonProc.pid}`)
 
-      console.log(`Mounted at ${mp} (PID ${proc.pid})`)
+      console.log(`Mounted at ${mp} (PID ${fuseProc.pid})`)
     })
 
   program

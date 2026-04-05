@@ -1,5 +1,4 @@
-import { beforeAll, describe, expect, test } from 'bun:test'
-import { spawnSync } from 'node:child_process'
+import { describe, expect, test } from 'bun:test'
 import {
   existsSync,
   mkdirSync,
@@ -8,69 +7,25 @@ import {
   unlinkSync,
   writeFileSync,
 } from 'node:fs'
-import { homedir } from 'node:os'
 import { join } from 'node:path'
 
 import { createTestContext, type TestContext } from './helpers.ts'
 
 /**
- * FUSE tests mount the CRM as a virtual filesystem and test read/write
- * operations using standard file system calls.
- *
- * These tests compile the crm-fuse helper once and spawn it directly
- * for each test context, bypassing `crm mount` to avoid async-spawn issues.
+ * FUSE tests mount the CRM as a virtual filesystem via `crm mount` and
+ * test read/write operations using standard file system calls.
  */
 
-const FUSE_SRC = join(import.meta.dir, '..', 'src', 'fuse-helper.c')
-const FUSE_DAEMON = join(import.meta.dir, '..', 'src', 'fuse-daemon.ts')
-const FUSE_BIN = join(homedir(), '.crm', 'bin', 'crm-fuse')
-
-const DEFAULT_STAGES = [
-  'lead',
-  'qualified',
-  'proposal',
-  'negotiation',
-  'closed-won',
-  'closed-lost',
-]
-
-let fuseAvailable = false
-
-// Compile the FUSE helper once before all tests
-beforeAll(() => {
-  if (!existsSync('/dev/fuse')) {
-    return
-  }
-  const binDir = join(homedir(), '.crm', 'bin')
-  if (!existsSync(binDir)) {
-    mkdirSync(binDir, { recursive: true })
-  }
-  const pkgConfig = spawnSync('pkg-config', ['--cflags', '--libs', 'fuse3'])
-  const fuseFlags = pkgConfig.stdout
-    ? pkgConfig.stdout.toString().trim().split(/\s+/)
-    : ['-lfuse3', '-lpthread']
-  const compile = spawnSync('gcc', ['-o', FUSE_BIN, FUSE_SRC, ...fuseFlags], {
-    stdio: ['pipe', 'pipe', 'pipe'],
-  })
-  fuseAvailable = compile.status === 0
-})
+const fuseAvailable = existsSync('/dev/fuse')
 
 interface FuseTestContext extends TestContext {
-  daemonProc: ReturnType<typeof Bun.spawn> | null
-  fuseProc: ReturnType<typeof Bun.spawn> | null
   mounted: boolean
   mountPoint: string
-  socketPath: string
 }
 
-function createFuseTestContext(
-  stages: string[] = DEFAULT_STAGES,
-): FuseTestContext {
+function createFuseTestContext(): FuseTestContext {
   const ctx = createTestContext() as FuseTestContext
   ctx.mountPoint = join(ctx.dir, 'mnt')
-  ctx.fuseProc = null
-  ctx.daemonProc = null
-  ctx.socketPath = join(ctx.dir, 'fuse.sock')
   mkdirSync(ctx.mountPoint)
 
   if (!fuseAvailable) {
@@ -78,42 +33,17 @@ function createFuseTestContext(
     return ctx
   }
 
-  // Seed the DB with tables (crm init creates them, but we need them for FUSE)
+  // Seed the DB with tables
   ctx.runOK('contact', 'list')
 
-  // Start the TS daemon first
-  ctx.daemonProc = Bun.spawn(
-    ['bun', 'run', FUSE_DAEMON, ctx.socketPath, ctx.dbPath, ...stages],
-    { stdio: ['pipe', 'pipe', 'pipe'] },
-  )
-
-  // Wait for daemon to signal readiness (writes "READY\n" to stdout)
-  {
-    const deadline = Date.now() + 5000
-    let daemonReady = false
-    while (Date.now() < deadline) {
-      if (existsSync(ctx.socketPath)) {
-        daemonReady = true
-        break
-      }
-      Bun.sleepSync(50)
-    }
-    if (!daemonReady) {
-      ctx.mounted = false
-      if (ctx.daemonProc) {
-        ctx.daemonProc.kill()
-      }
-      return ctx
-    }
+  // Mount via the CLI
+  const result = ctx.run('mount', ctx.mountPoint)
+  if (result.exitCode !== 0) {
+    ctx.mounted = false
+    return ctx
   }
 
-  // Spawn FUSE helper, passing socket path
-  ctx.fuseProc = Bun.spawn(
-    [FUSE_BIN, '-f', ctx.mountPoint, '--', ctx.socketPath],
-    { stdio: ['pipe', 'pipe', 'pipe'] },
-  )
-
-  // Wait for mount to become ready (poll for up to 3s)
+  // Wait for mount to become ready
   const deadline = Date.now() + 5000
   let ready = false
   while (Date.now() < deadline) {
@@ -135,20 +65,10 @@ function createFuseTestContext(
 
 function unmount(ctx: FuseTestContext) {
   if (!ctx.mounted) {
-    if (ctx.daemonProc) {
-      ctx.daemonProc.kill()
-    }
     return
   }
-  spawnSync('fusermount3', ['-u', ctx.mountPoint], {
-    stdio: ['pipe', 'pipe', 'pipe'],
-  })
-  if (ctx.fuseProc) {
-    ctx.fuseProc.kill()
-  }
-  if (ctx.daemonProc) {
-    ctx.daemonProc.kill()
-  }
+  ctx.run('unmount', ctx.mountPoint)
+  ctx.mounted = false
 }
 
 function skipIfNoFuse(ctx: FuseTestContext) {
@@ -342,7 +262,6 @@ describe('fuse: read contacts', () => {
         '+1-212-555-1234',
       )
 
-      // Symlink filename uses E.164 format regardless of input format
       const data = JSON.parse(
         readFileSync(
           join(ctx.mountPoint, 'contacts', '_by-phone', '+12125551234.json'),
@@ -889,7 +808,6 @@ describe('fuse: write operations', () => {
         }),
       )
 
-      // Verify via CLI.
       const contacts = ctx.runJSON<Array<{ name: string }>>(
         'contact',
         'list',
@@ -1014,10 +932,9 @@ describe('fuse: write operations', () => {
       data.stage = 'qualified'
       writeFileSync(filePath, JSON.stringify(data))
 
-      // Stage change should be tracked in history.
       const show = ctx.runOK('deal', 'show', id)
       expect(show).toContain('qualified')
-      expect(show).toContain('lead') // history should contain old stage
+      expect(show).toContain('lead')
     } finally {
       unmount(ctx)
     }
@@ -1070,7 +987,6 @@ describe('fuse: write validation', () => {
         )
       }).toThrow()
 
-      // No contact should have been created.
       const contacts = ctx.runJSON<unknown[]>(
         'contact',
         'list',
@@ -1114,7 +1030,6 @@ describe('fuse: write validation', () => {
       return
     }
     try {
-      // Contact requires "name" — writing without it should fail.
       expect(() => {
         writeFileSync(
           join(ctx.mountPoint, 'contacts', 'bad.json'),
@@ -1140,7 +1055,6 @@ describe('fuse: write validation', () => {
       return
     }
     try {
-      // "emails" must be an array, not a string.
       expect(() => {
         writeFileSync(
           join(ctx.mountPoint, 'contacts', 'bad.json'),
@@ -1166,12 +1080,10 @@ describe('fuse: write validation', () => {
       return
     }
     try {
-      // Fail first.
       expect(() => {
         writeFileSync(join(ctx.mountPoint, 'contacts', 'bad.json'), 'not json')
       }).toThrow()
 
-      // Then succeed.
       writeFileSync(
         join(ctx.mountPoint, 'contacts', 'good.json'),
         JSON.stringify({ name: 'Valid Contact', emails: ['valid@acme.com'] }),
@@ -1212,7 +1124,6 @@ describe('fuse: write validation', () => {
       )
       const filePath = join(ctx.mountPoint, 'contacts', files[0])
 
-      // Write back WITHOUT custom_fields — full doc replace means they should be cleared.
       writeFileSync(
         filePath,
         JSON.stringify({ name: 'Jane Doe', emails: ['jane@acme.com'] }),
@@ -1250,7 +1161,6 @@ describe('fuse: write validation', () => {
         )
       }).toThrow()
 
-      // Original data should be unchanged.
       const data = JSON.parse(readFileSync(filePath, 'utf-8'))
       expect(data.name).toBe('Jane')
       expect(data).not.toHaveProperty('nonexistent')
@@ -1457,7 +1367,6 @@ describe('fuse: phone normalization', () => {
         '+44 20 7946 0958',
       )
 
-      // Symlink should be E.164 normalized
       const byPhone = readdirSync(join(ctx.mountPoint, 'contacts', '_by-phone'))
       expect(byPhone).toContain('+442079460958.json')
       expect(byPhone).not.toContain('+44 20 7946 0958.json')
@@ -1583,43 +1492,18 @@ describe('fuse: readonly mode', () => {
     ctx.mountPoint = join(ctx.dir, 'mnt-ro')
     mkdirSync(ctx.mountPoint)
 
-    ctx.socketPath = join(ctx.dir, 'fuse-ro.sock')
-    ctx.daemonProc = null
-
     // Seed the DB
     ctx.runOK('contact', 'add', '--name', 'Jane', '--email', 'jane@acme.com')
 
-    // Start daemon
-    ctx.daemonProc = Bun.spawn(
-      [
-        'bun',
-        'run',
-        FUSE_DAEMON,
-        ctx.socketPath,
-        ctx.dbPath,
-        ...DEFAULT_STAGES,
-      ],
-      { stdio: ['pipe', 'pipe', 'pipe'] },
-    )
-
-    // Wait for daemon socket
-    {
-      const dDeadline = Date.now() + 5000
-      while (Date.now() < dDeadline) {
-        if (existsSync(ctx.socketPath)) {
-          break
-        }
-        Bun.sleepSync(50)
-      }
+    // Mount read-only via CLI
+    const result = ctx.run('mount', '--readonly', ctx.mountPoint)
+    if (result.exitCode !== 0) {
+      console.warn('FUSE mount failed — skipping test')
+      return
     }
 
-    // Mount read-only via the helper directly
-    ctx.fuseProc = Bun.spawn(
-      [FUSE_BIN, '-o', 'ro', '-f', ctx.mountPoint, '--', ctx.socketPath],
-      { stdio: ['pipe', 'pipe', 'pipe'] },
-    )
-
-    const deadline = Date.now() + 3000
+    // Wait for mount
+    const deadline = Date.now() + 5000
     let ready = false
     while (Date.now() < deadline) {
       try {
@@ -1672,7 +1556,6 @@ describe('fuse: mount/unmount', () => {
 
     unmount(ctx)
 
-    // After unmount, the mount point should be an empty directory (or not a FUSE mount).
     const entries = readdirSync(ctx.mountPoint)
     expect(entries).toHaveLength(0)
   })
@@ -1683,13 +1566,9 @@ describe('fuse: mount/unmount', () => {
       return
     }
     try {
-      // Try to mount a second FUSE helper to the same mountpoint
-      const proc2 = Bun.spawnSync(
-        [FUSE_BIN, '-f', ctx.mountPoint, '--', ctx.socketPath],
-        { stdio: ['pipe', 'pipe', 'pipe'] },
-      )
-      // The second mount should fail (non-zero exit)
-      expect(proc2.exitCode).not.toBe(0)
+      // Second mount to the same path should fail
+      const result = ctx.run('mount', ctx.mountPoint)
+      expect(result.exitCode).not.toBe(0)
     } finally {
       unmount(ctx)
     }
