@@ -30,6 +30,14 @@ import {
   slugify,
 } from './fuse-json'
 import { normalizePhone } from './normalize'
+import {
+  computeConversion,
+  computeForecast,
+  computeLost,
+  computeStale,
+  computeVelocity,
+  computeWon,
+} from './reports'
 import { resolveContact } from './resolve'
 
 function makeId(prefix: string): string {
@@ -724,17 +732,34 @@ async function handleRead(
     return { data: JSON.stringify(data) }
   }
 
-  // reports/stale.json
   if (p === 'reports/stale.json') {
-    return { data: JSON.stringify([]) }
+    const data = await computeStale(db)
+    return { data: JSON.stringify(data) }
   }
 
-  // Other known reports — empty arrays
-  if (
-    p.startsWith('reports/') &&
-    KNOWN_REPORTS.has(p.slice('reports/'.length))
-  ) {
-    return { data: JSON.stringify([]) }
+  if (p === 'reports/conversion.json') {
+    const data = await computeConversion(db, stages)
+    return { data: JSON.stringify(data) }
+  }
+
+  if (p === 'reports/velocity.json') {
+    const data = await computeVelocity(db, stages)
+    return { data: JSON.stringify(data) }
+  }
+
+  if (p === 'reports/forecast.json') {
+    const data = await computeForecast(db)
+    return { data: JSON.stringify(data) }
+  }
+
+  if (p === 'reports/won.json') {
+    const data = await computeWon(db, config)
+    return { data: JSON.stringify(data) }
+  }
+
+  if (p === 'reports/lost.json') {
+    const data = await computeLost(db, config)
+    return { data: JSON.stringify(data) }
   }
 
   // search/<query>.json

@@ -18,6 +18,14 @@ import {
   dealFilename,
   slugify,
 } from './fuse-json'
+import {
+  computeConversion,
+  computeForecast,
+  computeLost,
+  computeStale,
+  computeVelocity,
+  computeWon,
+} from './reports'
 
 function writeJSON(filePath: string, data: unknown): void {
   writeFileSync(filePath, JSON.stringify(data, null, 2))
@@ -290,10 +298,16 @@ export async function generateFS(
 
   // Write reports
   writeJSON(join(outDir, 'reports', 'pipeline.json'), pipelineData)
-  writeJSON(join(outDir, 'reports', 'stale.json'), [])
-  writeJSON(join(outDir, 'reports', 'forecast.json'), [])
-  writeJSON(join(outDir, 'reports', 'conversion.json'), [])
-  writeJSON(join(outDir, 'reports', 'velocity.json'), [])
-  writeJSON(join(outDir, 'reports', 'won.json'), [])
-  writeJSON(join(outDir, 'reports', 'lost.json'), [])
+  writeJSON(join(outDir, 'reports', 'stale.json'), await computeStale(db))
+  writeJSON(join(outDir, 'reports', 'forecast.json'), await computeForecast(db))
+  writeJSON(
+    join(outDir, 'reports', 'conversion.json'),
+    await computeConversion(db, config.pipeline.stages),
+  )
+  writeJSON(
+    join(outDir, 'reports', 'velocity.json'),
+    await computeVelocity(db, config.pipeline.stages),
+  )
+  writeJSON(join(outDir, 'reports', 'won.json'), await computeWon(db, config))
+  writeJSON(join(outDir, 'reports', 'lost.json'), await computeLost(db, config))
 }
