@@ -87,6 +87,22 @@ export function registerContactCommands(program: Command) {
         companies.push(await getOrCreateCompany(db, c, config))
       }
       const custom = parseKV(opts.set)
+      if (
+        !runHook(config, 'pre-contact-add', {
+          name: opts.name,
+          emails: opts.email,
+          phones,
+          companies,
+          linkedin,
+          x,
+          bluesky,
+          telegram,
+          tags: opts.tag,
+          custom_fields: custom,
+        })
+      ) {
+        die('Error: pre-contact-add hook rejected creation')
+      }
       await db.insert(schema.contacts).values({
         id: cid,
         name: opts.name,
@@ -138,10 +154,14 @@ export function registerContactCommands(program: Command) {
         contactToRow(c, config),
       )
       if (opts.tag) {
-        rows = rows.filter((c) => c.tags.includes(opts.tag))
+        rows = rows.filter((c) =>
+          (c.tags as string[] | undefined)?.includes(opts.tag),
+        )
       }
       if (opts.company) {
-        rows = rows.filter((c) => c.companies.includes(opts.company))
+        rows = rows.filter((c) =>
+          (c.companies as string[] | undefined)?.includes(opts.company),
+        )
       }
       if (opts.filter) {
         const f = parseFilter(opts.filter)
@@ -281,6 +301,23 @@ export function registerContactCommands(program: Command) {
           telegram = null
         }
       }
+      if (
+        !runHook(config, 'pre-contact-edit', {
+          id: c.id,
+          name,
+          emails,
+          phones,
+          companies,
+          linkedin,
+          x,
+          bluesky,
+          telegram,
+          tags,
+          custom_fields: custom,
+        })
+      ) {
+        die('Error: pre-contact-edit hook rejected edit')
+      }
       await db
         .update(schema.contacts)
         .set({
@@ -303,6 +340,19 @@ export function registerContactCommands(program: Command) {
         .where(eq(schema.contacts.id, c.id))
       const row = results[0]
       await upsertSearchIndex(db, 'contact', c.id, buildContactSearch(row))
+      runHook(config, 'post-contact-edit', {
+        id: c.id,
+        name,
+        emails,
+        phones,
+        companies,
+        linkedin,
+        x,
+        bluesky,
+        telegram,
+        tags,
+        custom_fields: custom,
+      })
     })
 
   cmd

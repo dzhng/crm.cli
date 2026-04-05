@@ -81,6 +81,21 @@ export function registerDealCommands(program: Command) {
       const value = opts.value === undefined ? null : Number(opts.value)
       const probability =
         opts.probability === undefined ? null : Number(opts.probability)
+      if (
+        !runHook(config, 'pre-deal-add', {
+          title: opts.title,
+          value,
+          stage,
+          contacts: contactIds,
+          company: companyId,
+          expected_close: opts.expectedClose || null,
+          probability,
+          tags: opts.tag,
+          custom_fields: custom,
+        })
+      ) {
+        die('Error: pre-deal-add hook rejected creation')
+      }
       await db.insert(schema.deals).values({
         id,
         title: opts.title,
@@ -101,6 +116,18 @@ export function registerDealCommands(program: Command) {
         .where(eq(schema.deals.id, id))
       const row = results[0]
       await upsertSearchIndex(db, 'deal', id, buildDealSearch(row))
+      runHook(config, 'post-deal-add', {
+        id,
+        title: opts.title,
+        value,
+        stage,
+        contacts: contactIds,
+        company: companyId,
+        expected_close: opts.expectedClose || null,
+        probability,
+        tags: opts.tag,
+        custom_fields: custom,
+      })
       console.log(id)
     })
 
@@ -121,15 +148,21 @@ export function registerDealCommands(program: Command) {
         rows = rows.filter((d) => d.stage === opts.stage)
       }
       if (opts.minValue) {
-        rows = rows.filter((d) => (d.value ?? 0) >= Number(opts.minValue))
+        rows = rows.filter(
+          (d) => ((d.value as number) ?? 0) >= Number(opts.minValue),
+        )
       }
       if (opts.maxValue) {
-        rows = rows.filter((d) => (d.value ?? 0) <= Number(opts.maxValue))
+        rows = rows.filter(
+          (d) => ((d.value as number) ?? 0) <= Number(opts.maxValue),
+        )
       }
       if (opts.contact) {
         const ct = await resolveContact(db, opts.contact, config)
         if (ct) {
-          rows = rows.filter((d) => d.contacts.includes(ct.id))
+          rows = rows.filter((d) =>
+            (d.contacts as string[] | undefined)?.includes(ct.id),
+          )
         } else {
           rows = []
         }
@@ -214,6 +247,18 @@ export function registerDealCommands(program: Command) {
       for (const k of opts.unset) {
         delete custom[k]
       }
+      if (
+        !runHook(config, 'pre-deal-edit', {
+          id: d.id,
+          title,
+          value,
+          contacts,
+          tags,
+          custom_fields: custom,
+        })
+      ) {
+        die('Error: pre-deal-edit hook rejected edit')
+      }
       await db
         .update(schema.deals)
         .set({
@@ -231,6 +276,14 @@ export function registerDealCommands(program: Command) {
         .where(eq(schema.deals.id, d.id))
       const row = results[0]
       await upsertSearchIndex(db, 'deal', d.id, buildDealSearch(row))
+      runHook(config, 'post-deal-edit', {
+        id: d.id,
+        title,
+        value,
+        contacts,
+        tags,
+        custom_fields: custom,
+      })
     })
 
   cmd
@@ -252,6 +305,17 @@ export function registerDealCommands(program: Command) {
         die(`Error: deal is already in stage "${opts.stage}"`)
       }
       const oldStage = d.stage
+      if (
+        !runHook(config, 'pre-deal-stage-change', {
+          deal: d.id,
+          from: oldStage,
+          to: opts.stage,
+          note: opts.note,
+          reason: opts.reason,
+        })
+      ) {
+        die('Error: pre-deal-stage-change hook rejected stage move')
+      }
       const n = now()
       await db
         .update(schema.deals)
@@ -287,14 +351,26 @@ export function registerDealCommands(program: Command) {
     .argument('<ref>')
     .option('--force')
     .action(async (ref) => {
-      const { db } = await getCtx()
+      const { db, config } = await getCtx()
       const d = await resolveDeal(db, ref)
       if (!d) {
         die(`Error: deal not found: ${ref}`)
       }
+      if (
+        !runHook(config, 'pre-deal-rm', {
+          id: d.id,
+          title: d.title,
+        })
+      ) {
+        die('Error: pre-deal-rm hook rejected deletion')
+      }
       await db.delete(schema.activities).where(eq(schema.activities.deal, d.id))
       await db.delete(schema.deals).where(eq(schema.deals.id, d.id))
       await removeSearchIndex(db, d.id)
+      runHook(config, 'post-deal-rm', {
+        id: d.id,
+        title: d.title,
+      })
     })
 }
 

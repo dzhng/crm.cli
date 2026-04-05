@@ -23,9 +23,6 @@
   "extends": ["ultracite/biome/core"],
   "linter": {
     "rules": {
-      "suspicious": {
-        "noExplicitAny": "error"
-      },
       "complexity": {
         "noExcessiveCognitiveComplexity": "off"
       },

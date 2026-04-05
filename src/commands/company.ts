@@ -56,6 +56,17 @@ export function registerCompanyCommands(program: Command) {
         }
       }
       const custom = parseKV(opts.set)
+      if (
+        !runHook(config, 'pre-company-add', {
+          name: opts.name,
+          websites,
+          phones,
+          tags: opts.tag,
+          custom_fields: custom,
+        })
+      ) {
+        die('Error: pre-company-add hook rejected creation')
+      }
       await db.insert(schema.companies).values({
         id: cid,
         name: opts.name,
@@ -72,6 +83,14 @@ export function registerCompanyCommands(program: Command) {
         .where(eq(schema.companies.id, cid))
       const row = results[0]
       await upsertSearchIndex(db, 'company', cid, buildCompanySearch(row))
+      runHook(config, 'post-company-add', {
+        id: cid,
+        name: opts.name,
+        websites,
+        phones,
+        tags: opts.tag,
+        custom_fields: custom,
+      })
       console.log(cid)
     })
 
@@ -87,7 +106,9 @@ export function registerCompanyCommands(program: Command) {
         companyToRow(c, config),
       )
       if (opts.tag) {
-        rows = rows.filter((c) => c.tags.includes(opts.tag))
+        rows = rows.filter((c) =>
+          (c.tags as string[] | undefined)?.includes(opts.tag),
+        )
       }
       if (opts.sort) {
         rows.sort((a, b) =>
@@ -179,6 +200,18 @@ export function registerCompanyCommands(program: Command) {
       for (const k of opts.unset) {
         delete custom[k]
       }
+      if (
+        !runHook(config, 'pre-company-edit', {
+          id: co.id,
+          name,
+          websites,
+          phones,
+          tags,
+          custom_fields: custom,
+        })
+      ) {
+        die('Error: pre-company-edit hook rejected edit')
+      }
       await db
         .update(schema.companies)
         .set({
@@ -196,6 +229,14 @@ export function registerCompanyCommands(program: Command) {
         .where(eq(schema.companies.id, co.id))
       const row = results[0]
       await upsertSearchIndex(db, 'company', co.id, buildCompanySearch(row))
+      runHook(config, 'post-company-edit', {
+        id: co.id,
+        name,
+        websites,
+        phones,
+        tags,
+        custom_fields: custom,
+      })
     })
 
   cmd

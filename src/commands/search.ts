@@ -93,6 +93,7 @@ export function registerSearchCommands(program: Command) {
     .argument('<query>')
     .option('--type <type>')
     .option('--limit <n>')
+    .option('--threshold <n>', 'Minimum similarity score 0.0-1.0')
     .action(async (query, opts) => {
       const { db, config, fmt } = await getCtx()
       const queryWords = query.toLowerCase().split(/\s+/)
@@ -115,11 +116,17 @@ export function registerSearchCommands(program: Command) {
           }
         }
         if (score > 0) {
-          allEntities.push({ ...row, score })
+          const normalized =
+            queryWords.length > 0 ? score / queryWords.length : 0
+          allEntities.push({ ...row, score: normalized })
         }
       }
       allEntities.sort((a, b) => b.score - a.score)
       let limited = allEntities
+      if (opts.threshold) {
+        const t = Number(opts.threshold)
+        limited = limited.filter((e) => e.score >= t)
+      }
       if (opts.limit) {
         limited = limited.slice(0, Number(opts.limit))
       }

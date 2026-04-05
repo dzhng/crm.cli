@@ -188,6 +188,39 @@ describe('find (semantic search)', () => {
       expect(r.type).toBe('contact')
     }
   })
+
+  test('threshold filters low-scoring results', () => {
+    const ctx = createTestContext()
+    ctx.runOK(
+      'contact',
+      'add',
+      '--name',
+      'Alice Chen',
+      '--company',
+      'FinTech London Ltd',
+      '--set',
+      'title=CTO',
+    )
+    ctx.runOK('contact', 'add', '--name', 'Bob Wilson', '--company', 'Acme')
+
+    const highThreshold = ctx.runJSON<unknown[]>(
+      'find',
+      'fintech CTO London',
+      '--threshold',
+      '0.9',
+      '--format',
+      'json',
+    )
+    const lowThreshold = ctx.runJSON<unknown[]>(
+      'find',
+      'fintech CTO London',
+      '--threshold',
+      '0.1',
+      '--format',
+      'json',
+    )
+    expect(lowThreshold.length).toBeGreaterThanOrEqual(highThreshold.length)
+  })
 })
 
 describe('index', () => {

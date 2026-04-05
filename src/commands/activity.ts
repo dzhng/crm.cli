@@ -3,6 +3,7 @@ import type { Command } from 'commander'
 import { upsertSearchIndex } from '../db'
 import * as schema from '../drizzle-schema'
 import { activityToRow, formatOutput } from '../format'
+import { runHook } from '../hooks'
 import { collect, die, getCtx, makeId, now, parseKV } from '../lib/helpers'
 import { resolveCompany, resolveContact, resolveEntity } from '../resolve'
 
@@ -45,6 +46,18 @@ export function registerLogCommand(program: Command) {
       if (opts.deal) {
         deal = opts.deal
       }
+      if (
+        !runHook(config, 'pre-activity-add', {
+          type,
+          body,
+          contact,
+          company,
+          deal,
+          custom_fields: custom,
+        })
+      ) {
+        die('Error: pre-activity-add hook rejected creation')
+      }
       await db.insert(schema.activities).values({
         id,
         type,
@@ -56,6 +69,15 @@ export function registerLogCommand(program: Command) {
         created_at: ts,
       })
       await upsertSearchIndex(db, 'activity', id, `${type} ${body}`)
+      runHook(config, 'post-activity-add', {
+        id,
+        type,
+        body,
+        contact,
+        company,
+        deal,
+        custom_fields: custom,
+      })
     })
 }
 
@@ -97,7 +119,7 @@ export function registerActivityCommands(program: Command) {
         rows = rows.filter((a) => a.type === opts.type)
       }
       if (opts.since) {
-        rows = rows.filter((a) => a.created_at >= opts.since)
+        rows = rows.filter((a) => (a.created_at as string) >= opts.since)
       }
       if (opts.limit) {
         rows = rows.slice(0, Number(opts.limit))

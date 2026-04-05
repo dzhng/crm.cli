@@ -162,7 +162,7 @@ export function contactToRow(
   const companies: string[] = safeJSON(c.companies)
   const tags: string[] = safeJSON(c.tags)
   const custom: Record<string, unknown> = safeJSON(c.custom_fields)
-  const _displayPhones = phones.map((p) =>
+  const displayPhones = phones.map((p) =>
     formatPhone(
       p,
       config?.phone?.display || 'international',
@@ -174,6 +174,7 @@ export function contactToRow(
     name: c.name,
     emails,
     phones,
+    _display_phones: displayPhones,
     companies,
     linkedin: c.linkedin || null,
     x: c.x || null,

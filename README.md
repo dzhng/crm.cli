@@ -1,23 +1,55 @@
 # crm.cli
 
-A headless, CLI-first CRM. Your contacts, deals, and pipeline in a single SQLite file — queryable, scriptable, pipe-friendly.
+![crm.cli — Your CRM is a filesystem](assets/cover.png)
 
+**A headless, CLI-first CRM for developers who do sales.** Contacts, deals, and pipeline in a single SQLite file — queryable from your terminal, composable with Unix tools, and mountable as a virtual filesystem so any tool that reads files (Claude Code, Codex, grep, jq, vim) has full CRM access without any integration.
+
+No server. No Docker. No accounts. No GUI. Just `bun install -g crm.cli` and go.
+
+## Why crm.cli
+
+Existing CRMs are GUI-first tools built for sales teams. If you're a technical founder, indie hacker, or engineer running BD, you're probably managing contacts in a spreadsheet you grep through. crm.cli is built for you.
+
+**Your CRM is a filesystem.** Mount it with `crm mount ~/crm` and every tool that reads files — AI agents, shell scripts, editors — gets full CRM access for free. No MCP servers, no API keys, no integration code. The filesystem is the universal API.
+
+```bash
+crm mount ~/crm
+ls ~/crm/contacts/
+cat ~/crm/contacts/jane-doe.json | jq .name
+# Point Claude Code at ~/crm and ask it to research your pipeline
 ```
-crm contact add --name "Jane Doe" --email jane@acme.com
+
+**Deep data normalization.** A CSV has zero setup cost. crm.cli justifies its existence with structured intelligence: E.164 phone normalization (look up by any format), website normalization, social handle extraction (paste a LinkedIn URL, it stores the handle), entity merge with reference relinking, and fuzzy duplicate detection. This is what a spreadsheet can never provide.
+
+```bash
+crm contact add --name "Jane Doe" \
+  --email jane@acme.com \
+  --phone "+1-212-555-1234" \
+  --linkedin https://linkedin.com/in/janedoe \
+  --company Acme
+# Phone stored as E.164, LinkedIn URL → handle, company auto-linked
+```
+
+**Pipe-friendly by default.** Every command outputs structured data. Pipe to `jq`, `grep`, `awk`, or feed into scripts. `--format json` on everything.
+
+```bash
 crm deal list --stage qualified --format json | jq '.[] | .value'
 crm find "that fintech CTO from London"
-crm dupes
 crm report pipeline
+crm dupes --threshold 0.5
 ```
 
 ## Install
 
 ```bash
-# Install globally via bun
+# Install globally via bun (recommended)
 bun install -g crm.cli
 
 # Or npx without installing
 bunx crm.cli contact list
+
+# Or install the compiled binary
+curl -fsSL https://raw.githubusercontent.com/dzhng/crm.cli/main/install.sh | sh
 ```
 
 Or build from source:
@@ -91,7 +123,6 @@ Settings in a closer `crm.toml` override the global config. The `--config` flag 
 | `--format <fmt>` | `CRM_FORMAT` | Output format: `table`, `json`, `csv`, `tsv`, `ids` |
 | `--no-color` | `NO_COLOR` | Disable colored output |
 | `--config <path>` | `CRM_CONFIG` | Path to config file |
-| `--verbose` | — | Verbose output |
 | `--version` | — | Print version |
 
 ---

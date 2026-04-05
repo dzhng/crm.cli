@@ -28,7 +28,7 @@ while (_argIdx < rawArgv.length) {
   } else if (arg === '--format') {
     _argIdx++
     gFmt = rawArgv[_argIdx]
-  } else if (arg !== '--no-color' && arg !== '--verbose') {
+  } else if (arg !== '--no-color') {
     cleanArgv.push(arg)
   }
   _argIdx++
@@ -367,11 +367,13 @@ export function showEntity(detail: Record<string, unknown>, fmt: string) {
     }
   }
   // Show phones with both raw E.164 and display format
-  if (detail._display_phones?.length && detail.phones?.length) {
+  const displayPhones = detail._display_phones as string[] | undefined
+  const phones = detail.phones as string[] | undefined
+  if (displayPhones?.length && phones?.length) {
     const idx = lines.findIndex((l) => l.startsWith('phones:'))
     if (idx >= 0) {
-      const combined = detail.phones.map((raw: string, i: number) => {
-        const disp = detail._display_phones[i]
+      const combined = phones.map((raw: string, i: number) => {
+        const disp = displayPhones[i]
         return disp && disp !== raw ? `${raw} (${disp})` : raw
       })
       lines[idx] = `phones: ${combined.join(', ')}`
