@@ -8,7 +8,7 @@ import type { Company, Contact, Deal } from '../drizzle-schema'
 import * as schema from '../drizzle-schema'
 import { companyToRow, contactToRow, dealToRow, safeJSON } from '../format'
 import { formatPhone } from '../normalize'
-import { resolveCompanyForLink } from '../resolve'
+import { resolveCompanyForLink, resolveContact } from '../resolve'
 
 // ── Global option extraction ──
 const rawArgv = process.argv.slice(2)
@@ -120,6 +120,33 @@ export async function getOrCreateCompanyId(
     updated_at: n,
   })
   await upsertSearchIndex(db, 'company', cid, ref)
+  return cid
+}
+
+export async function getOrCreateContactId(
+  db: DB,
+  ref: string,
+  config: CRMConfig,
+): Promise<string> {
+  const ct = await resolveContact(db, ref, config)
+  if (ct) {
+    return ct.id
+  }
+  const cid = makeId('ct')
+  const n = now()
+  const isEmail = ref.includes('@') && !ref.includes('/')
+  await db.insert(schema.contacts).values({
+    id: cid,
+    name: isEmail ? ref.split('@')[0] : ref,
+    emails: isEmail ? JSON.stringify([ref]) : '[]',
+    phones: '[]',
+    companies: '[]',
+    tags: '[]',
+    custom_fields: '{}',
+    created_at: n,
+    updated_at: n,
+  })
+  await upsertSearchIndex(db, 'contact', cid, ref)
   return cid
 }
 

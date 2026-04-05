@@ -3,6 +3,7 @@ import { eq } from 'drizzle-orm'
 
 import { removeSearchIndex, upsertSearchIndex } from '../db'
 import * as schema from '../drizzle-schema'
+import { applyFilter, parseFilter } from '../filter'
 import { dealToRow, formatOutput, safeJSON } from '../format'
 import { runHook } from '../hooks'
 import {
@@ -13,12 +14,18 @@ import {
   die,
   getCtx,
   getOrCreateCompanyId,
+  getOrCreateContactId,
   makeId,
   now,
   parseKV,
   showEntity,
 } from '../lib/helpers'
-import { resolveCompanyForLink, resolveContact, resolveDeal } from '../resolve'
+import {
+  resolveCompany,
+  resolveCompanyForLink,
+  resolveContact,
+  resolveDeal,
+} from '../resolve'
 
 export function registerDealCommands(program: Command) {
   const cmd = program.command('deal').description('Manage deals')
@@ -59,11 +66,10 @@ export function registerDealCommands(program: Command) {
       }
       const contactIds: string[] = []
       for (const ref of opts.contact) {
-        const ct = await resolveContact(db, ref, config)
-        if (!ct) {
-          die(`Error: contact not found: ${ref}`)
+        const ctId = await getOrCreateContactId(db, ref, config)
+        if (!contactIds.includes(ctId)) {
+          contactIds.push(ctId)
         }
-        contactIds.push(ct.id)
       }
       let companyId: string | null = null
       if (opts.company) {
@@ -138,6 +144,9 @@ export function registerDealCommands(program: Command) {
     .option('--min-value <n>')
     .option('--max-value <n>')
     .option('--contact <ref>')
+    .option('--company <ref>')
+    .option('--tag <tag>')
+    .option('--filter <expr>')
     .option('--sort <field>')
     .option('--reverse', 'Reverse sort order')
     .option('--limit <n>')
@@ -169,6 +178,23 @@ export function registerDealCommands(program: Command) {
         } else {
           rows = []
         }
+      }
+      if (opts.company) {
+        const co = await resolveCompany(db, opts.company, config)
+        if (co) {
+          rows = rows.filter((d) => d.company === co.id)
+        } else {
+          rows = []
+        }
+      }
+      if (opts.tag) {
+        rows = rows.filter((d) =>
+          (d.tags as string[] | undefined)?.includes(opts.tag),
+        )
+      }
+      if (opts.filter) {
+        const f = parseFilter(opts.filter)
+        rows = rows.filter((d) => applyFilter(d, f))
       }
       if (opts.sort) {
         rows.sort((a, b) => {
@@ -227,12 +253,9 @@ export function registerDealCommands(program: Command) {
       let tags: string[] = safeJSON(d.tags)
       const custom: Record<string, unknown> = safeJSON(d.custom_fields)
       for (const r of opts.addContact) {
-        const ct = await resolveContact(db, r, config)
-        if (!ct) {
-          die(`Error: contact not found: ${r}`)
-        }
-        if (!contacts.includes(ct.id)) {
-          contacts.push(ct.id)
+        const ctId = await getOrCreateContactId(db, r, config)
+        if (!contacts.includes(ctId)) {
+          contacts.push(ctId)
         }
       }
       for (const r of opts.rmContact) {

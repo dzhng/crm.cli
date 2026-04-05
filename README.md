@@ -345,8 +345,8 @@ crm deal add --title "Acme Enterprise" --value 50000 --stage qualified --contact
 | `--title` | yes | Deal name |
 | `--value` | no | Deal value in dollars (integer) |
 | `--stage` | no | Pipeline stage (default: first configured stage) |
-| `--contact` | no | Link contact by ID or email (repeatable — multiple allowed) |
-| `--company` | no | Link company by ID or website |
+| `--contact` | no | Link contact by ID or email (repeatable — auto-creates if not found) |
+| `--company` | no | Link company by ID or website (auto-creates if not found) |
 | `--expected-close` | no | Expected close date (`YYYY-MM-DD`) |
 | `--probability` | no | Win probability 0-100 |
 | `--tag` | no | Tag (multiple allowed) |
@@ -371,6 +371,7 @@ crm deal list --min-value 10000 --max-value 100000
 | `--min-value` | Minimum deal value |
 | `--max-value` | Maximum deal value |
 | `--tag` | Filter by tag |
+| `--filter` | Filter expression (see Filtering) — works on both core and custom fields |
 | `--sort` | Sort: `title`, `value`, `stage`, `created`, `updated`, `expected-close` |
 | `--reverse` | Reverse sort order |
 | `--limit` | Max results |
@@ -388,7 +389,7 @@ Same pattern as other entities. `--stage` is NOT used here — use `crm deal mov
 |------|-------------|
 | `--title` | Update title |
 | `--value` | Update value |
-| `--add-contact` | Link an additional contact |
+| `--add-contact` | Link an additional contact (auto-creates if not found) |
 | `--rm-contact` | Unlink a contact |
 | `--company` | Change linked company |
 | `--expected-close` | Update expected close date |
@@ -436,6 +437,24 @@ Pipeline
 
 ---
 
+### Auto-Create Behavior
+
+When linking entities via `--contact` or `--company` flags, crm.cli auto-creates stubs if the referenced entity doesn't exist. This applies consistently across all commands:
+
+| Command | `--contact` | `--company` |
+|---------|-------------|-------------|
+| `crm contact add` | — | auto-creates |
+| `crm contact edit` | — | auto-creates |
+| `crm deal add` | auto-creates | auto-creates |
+| `crm deal edit --add-contact` | auto-creates | auto-creates |
+| `crm log` | auto-creates | auto-creates |
+
+Auto-created contacts use the email local part as the name (e.g. `jane@acme.com` → name `jane`). Auto-created companies use the provided name directly. All stubs can be enriched later with `crm contact edit` or `crm company edit`.
+
+`--deal` flags always require an existing deal — deals are not auto-created.
+
+---
+
 ### Activities
 
 Interaction log attached to contacts, companies, or deals.
@@ -457,8 +476,8 @@ crm log note "General observation"  # standalone, no entity link
 
 | Flag | Description |
 |------|-------------|
-| `--contact` | Link to contact (repeatable for multi-contact activities) |
-| `--company` | Link to company (auto-creates if it doesn't exist) |
+| `--contact` | Link to contact (repeatable — auto-creates if not found) |
+| `--company` | Link to company (auto-creates if not found) |
 | `--deal` | Link to deal |
 | `--at` | Override timestamp (`YYYY-MM-DD` or `YYYY-MM-DDTHH:MM`) |
 | `--set` | Custom field `key=value` (e.g. `--set duration=15m`) |
@@ -481,7 +500,10 @@ crm activity list --limit 20
 | `--deal` | Filter by deal |
 | `--type` | Filter by activity type |
 | `--since` | Activities after date |
+| `--sort` | Sort field: `type`, `created_at` |
+| `--reverse` | Reverse sort order |
 | `--limit` | Max results |
+| `--offset` | Skip first N results |
 
 ---
 

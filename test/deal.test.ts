@@ -563,18 +563,28 @@ describe('pipeline', () => {
   })
 })
 
-describe('deal errors', () => {
-  test('add with nonexistent contact reference fails', () => {
+describe('deal auto-create', () => {
+  test('add with nonexistent contact auto-creates contact', () => {
     const ctx = createTestContext()
-    const result = ctx.runFail(
+    ctx.runOK(
       'deal',
       'add',
       '--title',
-      'Bad Deal',
+      'New Deal',
       '--contact',
       'nobody@nowhere.com',
     )
-    expect(result.stderr).not.toBe('')
+
+    // Contact should have been auto-created
+    const contacts = ctx.runJSON<Array<{ name: string; emails: string[] }>>(
+      'contact',
+      'list',
+      '--format',
+      'json',
+    )
+    expect(contacts).toHaveLength(1)
+    expect(contacts[0].name).toBe('nobody')
+    expect(contacts[0].emails).toContain('nobody@nowhere.com')
   })
 
   test('add with nonexistent company reference fails', () => {

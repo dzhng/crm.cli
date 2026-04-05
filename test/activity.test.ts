@@ -94,15 +94,20 @@ describe('log', () => {
     ctx.runFail('log', 'tweet', 'Hello')
   })
 
-  test('fails for nonexistent contact', () => {
+  test('--contact auto-creates contact if not found', () => {
     const ctx = createTestContext()
-    ctx.runFail(
-      'log',
-      'note',
-      'This should fail',
-      '--contact',
-      'nobody@example.com',
+    ctx.runOK('log', 'note', 'First touch', '--contact', 'nobody@example.com')
+
+    // Contact should have been auto-created
+    const contacts = ctx.runJSON<Array<{ name: string; emails: string[] }>>(
+      'contact',
+      'list',
+      '--format',
+      'json',
     )
+    expect(contacts).toHaveLength(1)
+    expect(contacts[0].name).toBe('nobody')
+    expect(contacts[0].emails).toContain('nobody@example.com')
   })
 
   test('log with deal link', () => {
