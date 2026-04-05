@@ -58,10 +58,13 @@ export function createTestContext() {
     env: Record<string, string>,
     ...args: string[]
   ): RunResult {
-    const proc = Bun.spawnSync(['bun', 'run', CRM_BIN, ...args], {
-      cwd: dir,
-      env: { ...process.env, NO_COLOR: '1', ...env },
-    })
+    const proc = Bun.spawnSync(
+      ['bun', 'run', CRM_BIN, '--db', dbPath, ...args],
+      {
+        cwd: dir,
+        env: { ...process.env, NO_COLOR: '1', ...env },
+      },
+    )
     return {
       stdout: proc.stdout.toString(),
       stderr: proc.stderr.toString(),

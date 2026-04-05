@@ -10,13 +10,20 @@
   },
   "type": "module",
   "bin": {
-    "crm": "./src/cli.ts"
+    "crm": "./dist/cli.js"
   },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
+    "build": "bun build src/cli.ts --outdir dist --target node --format esm --external @libsql/client --external drizzle-orm --external commander --external libphonenumber-js --external normalize-url --external toml --external ulid",
     "crm": "bun run src/cli.ts",
     "check-types": "tsc --noEmit",
     "test": "bun test --timeout 30000",
     "lint": "ultracite fix",
+    "prepublishOnly": "bun run build",
     "prepare": "husky"
   },
   "lint-staged": {

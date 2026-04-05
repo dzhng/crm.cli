@@ -142,14 +142,11 @@ export function loadConfig(opts: {
     }
   }
 
-  // DB path resolution: --db flag > CRM_DB env > config > cwd/test.db > default
+  // DB path resolution: --db flag > CRM_DB env > config file > default (~/.crm/crm.db)
   if (opts.dbPath) {
     config.database.path = opts.dbPath
   } else if (process.env.CRM_DB) {
     config.database.path = process.env.CRM_DB
-  } else if (!configPath) {
-    // No config file found — use local DB in working directory
-    config.database.path = join(process.cwd(), 'test.db')
   }
 
   // Format: --format flag > CRM_FORMAT env > config > default
