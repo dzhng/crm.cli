@@ -1703,7 +1703,13 @@ describe('contact merge', () => {
         'jane.doe@gmail.com',
       )
       .trim()
-    ctx.runOK('log', 'note', 'jane.doe@gmail.com', 'Activity on the old record')
+    ctx.runOK(
+      'log',
+      'note',
+      'Activity on the old record',
+      '--contact',
+      'jane.doe@gmail.com',
+    )
 
     ctx.runOK('contact', 'merge', id1, id2, '--keep-first')
 

@@ -70,8 +70,9 @@ describe('search (keyword FTS5)', () => {
     ctx.runOK(
       'log',
       'note',
-      'jane@acme.com',
       'Discussed the enterprise pricing tier',
+      '--contact',
+      'jane@acme.com',
     )
 
     const out = ctx.runOK('search', 'enterprise pricing')
@@ -239,6 +240,35 @@ describe('index', () => {
 
     const out = ctx.runOK('search', 'Jane')
     expect(out).toContain('Jane')
+  })
+
+  test('rebuild preserves company names in contact search', () => {
+    const ctx = createTestContext()
+    ctx.runOK('company', 'add', '--name', 'Acme Corp')
+    ctx.runOK('contact', 'add', '--name', 'Jane Doe', '--company', 'Acme Corp')
+
+    // Before rebuild, search by company name finds the contact
+    const before = ctx.runJSON<Array<{ type: string; name?: string }>>(
+      'search',
+      'Acme',
+      '--format',
+      'json',
+    )
+    const contactBefore = before.filter((r) => r.type === 'contact')
+    expect(contactBefore).toHaveLength(1)
+    expect(contactBefore[0].name).toBe('Jane Doe')
+
+    // After rebuild, company name should still be in the contact's search index
+    ctx.runOK('index', 'rebuild')
+    const after = ctx.runJSON<Array<{ type: string; name?: string }>>(
+      'search',
+      'Acme',
+      '--format',
+      'json',
+    )
+    const contactAfter = after.filter((r) => r.type === 'contact')
+    expect(contactAfter).toHaveLength(1)
+    expect(contactAfter[0].name).toBe('Jane Doe')
   })
 })
 

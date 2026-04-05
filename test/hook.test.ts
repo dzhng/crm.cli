@@ -381,7 +381,15 @@ describe('hooks', () => {
     const id = ctx
       .runOK('--config', configPath, 'contact', 'add', '--name', 'Jane')
       .trim()
-    ctx.runFail('--config', configPath, 'log', 'note', id, 'Some note')
+    ctx.runFail(
+      '--config',
+      configPath,
+      'log',
+      'note',
+      'Some note',
+      '--contact',
+      id,
+    )
   })
 
   test('post-activity-add hook receives activity data', () => {
@@ -389,7 +397,15 @@ describe('hooks', () => {
     const id = ctx
       .runOK('--config', configPath, 'contact', 'add', '--name', 'Jane')
       .trim()
-    ctx.runOK('--config', configPath, 'log', 'note', id, 'Great call today')
+    ctx.runOK(
+      '--config',
+      configPath,
+      'log',
+      'note',
+      'Great call today',
+      '--contact',
+      id,
+    )
     const data = readFileSync(hookOutput, 'utf-8')
     expect(data).toContain('note')
     expect(data).toContain('Great call today')

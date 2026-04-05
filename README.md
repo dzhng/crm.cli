@@ -440,25 +440,26 @@ Pipeline
 
 Interaction log attached to contacts, companies, or deals.
 
-#### `crm log <type> <entity-ref> <note>`
+#### `crm log <type> <body> [flags]`
 
 ```bash
-crm log note jane@acme.com "Had a great intro call, interested in enterprise plan"
-crm log call jane@acme.com "Demo scheduled for Friday" --set duration=15m
-crm log meeting jane@acme.com "Went through pricing, positive signals"
-crm log email jane@acme.com "Sent proposal PDF"
+crm log note "Had a great intro call" --contact jane@acme.com
+crm log call "Demo scheduled for Friday" --contact jane@acme.com --set duration=15m
+crm log meeting "Went through pricing" --contact jane@acme.com --company Acme
+crm log email "Sent proposal PDF" --contact jane@acme.com --deal dl_abc123
+crm log note "General observation"  # standalone, no entity link
 ```
 
 | Argument | Description |
 |----------|-------------|
 | `type` | One of: `note`, `call`, `meeting`, `email` (plus `stage-change` auto-created by `crm deal move`) |
-| `entity-ref` | Contact ID/email/phone, company ID/website/phone, or deal ID |
-| `note` | Free-text description |
+| `body` | Free-text description |
 
 | Flag | Description |
 |------|-------------|
-| `--contact` | Link additional contact(s) (repeatable) |
-| `--deal` | Also link this activity to a deal |
+| `--contact` | Link to contact (repeatable for multi-contact activities) |
+| `--company` | Link to company (auto-creates if it doesn't exist) |
+| `--deal` | Link to deal |
 | `--at` | Override timestamp (`YYYY-MM-DD` or `YYYY-MM-DDTHH:MM`) |
 | `--set` | Custom field `key=value` (e.g. `--set duration=15m`) |
 

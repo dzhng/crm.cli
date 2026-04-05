@@ -4,8 +4,16 @@ import { upsertSearchIndex } from '../db'
 import * as schema from '../drizzle-schema'
 import { activityToRow, formatOutput } from '../format'
 import { runHook } from '../hooks'
-import { collect, die, getCtx, makeId, now, parseKV } from '../lib/helpers'
-import { resolveCompany, resolveContact, resolveEntity } from '../resolve'
+import {
+  collect,
+  die,
+  getCtx,
+  getOrCreateCompanyId,
+  makeId,
+  now,
+  parseKV,
+} from '../lib/helpers'
+import { resolveCompany, resolveContact, resolveDeal } from '../resolve'
 
 const VALID_TYPES = ['note', 'call', 'meeting', 'email']
 
@@ -14,36 +22,24 @@ export function registerLogCommand(program: Command) {
     .command('log')
     .description('Log an activity')
     .argument('<type>', 'Activity type (note, call, meeting, email)')
-    .argument('<ref>', 'Entity reference')
     .argument('<body>', 'Activity body')
-    .option('--contact <ref>', 'Additional contact', collect, [])
-    .option('--deal <id>', 'Link to deal')
+    .option('--contact <ref>', 'Link to contact (repeatable)', collect, [])
+    .option('--company <ref>', 'Link to company (auto-creates if needed)')
+    .option('--deal <ref>', 'Link to deal')
     .option('--at <date>', 'Custom timestamp')
     .option('--set <kv>', 'Custom field', collect, [])
-    .action(async (type, ref, body, opts) => {
+    .action(async (type, body, opts) => {
       const { db, config } = await getCtx()
       if (!VALID_TYPES.includes(type)) {
         die(
           `Error: invalid activity type "${type}". Must be one of: ${VALID_TYPES.join(', ')}`,
         )
       }
-      const resolved = await resolveEntity(db, ref, config)
-      if (!resolved) {
-        die(`Error: entity not found: ${ref}`)
-      }
-      const id = makeId('ac')
-      const ts = opts.at || now()
-      const custom = parseKV(opts.set)
+
       const contacts: string[] = []
       let company: string | null = null
       let deal: string | null = null
-      if (resolved.type === 'contact') {
-        contacts.push(resolved.entity.id)
-      } else if (resolved.type === 'company') {
-        company = resolved.entity.id
-      } else if (resolved.type === 'deal') {
-        deal = resolved.entity.id
-      }
+
       for (const cRef of opts.contact) {
         const ct = await resolveContact(db, cRef, config)
         if (!ct) {
@@ -53,9 +49,23 @@ export function registerLogCommand(program: Command) {
           contacts.push(ct.id)
         }
       }
-      if (opts.deal) {
-        deal = opts.deal
+
+      if (opts.company) {
+        company = await getOrCreateCompanyId(db, opts.company, config)
       }
+
+      if (opts.deal) {
+        const d = await resolveDeal(db, opts.deal)
+        if (!d) {
+          die(`Error: deal not found: ${opts.deal}`)
+        }
+        deal = d.id
+      }
+
+      const id = makeId('ac')
+      const ts = opts.at || now()
+      const custom = parseKV(opts.set)
+
       if (
         !runHook(config, 'pre-activity-add', {
           type,

@@ -413,7 +413,7 @@ describe('export-fs', () => {
       '--contact',
       'jane@acme.com',
     )
-    ctx.runOK('log', 'note', 'jane@acme.com', 'Great call')
+    ctx.runOK('log', 'note', 'Great call', '--contact', 'jane@acme.com')
     ctx.runOK('export-fs', outDir)
     const emailFile = join(
       outDir,
@@ -434,8 +434,8 @@ describe('export-fs', () => {
     const ctx = createTestContext()
     const outDir = join(ctx.dir, 'export')
     ctx.runOK('contact', 'add', '--name', 'Jane', '--email', 'jane@acme.com')
-    ctx.runOK('log', 'note', 'jane@acme.com', 'A note')
-    ctx.runOK('log', 'call', 'jane@acme.com', 'A call')
+    ctx.runOK('log', 'note', 'A note', '--contact', 'jane@acme.com')
+    ctx.runOK('log', 'call', 'A call', '--contact', 'jane@acme.com')
     ctx.runOK('export-fs', outDir)
     const noteDir = join(outDir, 'activities', '_by-type', 'note')
     const callDir = join(outDir, 'activities', '_by-type', 'call')

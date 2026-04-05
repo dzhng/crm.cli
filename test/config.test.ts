@@ -98,8 +98,9 @@ describe('config: mount settings affect export-fs', () => {
         configPath,
         'log',
         'note',
-        'jane@acme.com',
         `Note ${i}`,
+        '--contact',
+        'jane@acme.com',
       )
     }
     const outDir = join(ctx.dir, 'export')

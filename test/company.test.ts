@@ -784,7 +784,13 @@ describe('company merge', () => {
         'acme.com/ventures',
       )
       .trim()
-    ctx.runOK('log', 'note', 'acme.com/ventures', 'Activity on the old company')
+    ctx.runOK(
+      'log',
+      'note',
+      'Activity on the old company',
+      '--company',
+      'acme.com/ventures',
+    )
 
     ctx.runOK('company', 'merge', id1, id2, '--keep-first')
 

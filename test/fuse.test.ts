@@ -492,7 +492,7 @@ describe('fuse: read contacts', () => {
         '--contact',
         'jane@acme.com',
       )
-      ctx.runOK('log', 'note', 'jane@acme.com', 'Great call today')
+      ctx.runOK('log', 'note', 'Great call today', '--contact', 'jane@acme.com')
 
       const data = JSON.parse(
         readFileSync(

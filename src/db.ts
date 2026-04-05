@@ -6,6 +6,11 @@ import { sql } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/libsql'
 
 import * as schema from './drizzle-schema'
+import {
+  buildCompanySearch,
+  buildContactSearch,
+  buildDealSearch,
+} from './lib/helpers'
 
 export type DB = ReturnType<typeof drizzle<typeof schema>>
 
@@ -117,19 +122,7 @@ export async function rebuildSearchIndex(db: DB): Promise<void> {
 
   const allContacts = await db.select().from(schema.contacts)
   for (const c of allContacts) {
-    const content = [
-      c.name,
-      c.emails,
-      c.phones,
-      c.linkedin,
-      c.x,
-      c.bluesky,
-      c.telegram,
-      c.tags,
-      c.custom_fields,
-    ]
-      .filter(Boolean)
-      .join(' ')
+    const content = await buildContactSearch(db, c)
     await db.run(
       sql`INSERT INTO search_index (entity_type, entity_id, content) VALUES (${'contact'}, ${c.id}, ${content})`,
     )
@@ -137,9 +130,7 @@ export async function rebuildSearchIndex(db: DB): Promise<void> {
 
   const allCompanies = await db.select().from(schema.companies)
   for (const co of allCompanies) {
-    const content = [co.name, co.websites, co.phones, co.tags, co.custom_fields]
-      .filter(Boolean)
-      .join(' ')
+    const content = buildCompanySearch(co)
     await db.run(
       sql`INSERT INTO search_index (entity_type, entity_id, content) VALUES (${'company'}, ${co.id}, ${content})`,
     )
@@ -147,9 +138,7 @@ export async function rebuildSearchIndex(db: DB): Promise<void> {
 
   const allDeals = await db.select().from(schema.deals)
   for (const d of allDeals) {
-    const content = [d.title, d.stage, d.tags, d.custom_fields]
-      .filter(Boolean)
-      .join(' ')
+    const content = buildDealSearch(d)
     await db.run(
       sql`INSERT INTO search_index (entity_type, entity_id, content) VALUES (${'deal'}, ${d.id}, ${content})`,
     )

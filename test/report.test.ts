@@ -75,8 +75,8 @@ describe('report activity', () => {
   test('shows activity summary', () => {
     const ctx = createTestContext()
     ctx.runOK('contact', 'add', '--name', 'Jane', '--email', 'jane@acme.com')
-    ctx.runOK('log', 'note', 'jane@acme.com', 'Note 1')
-    ctx.runOK('log', 'call', 'jane@acme.com', 'Call 1')
+    ctx.runOK('log', 'note', 'Note 1', '--contact', 'jane@acme.com')
+    ctx.runOK('log', 'call', 'Call 1', '--contact', 'jane@acme.com')
 
     const out = ctx.runOK('report', 'activity')
     expect(out).toContain('note')
@@ -86,9 +86,9 @@ describe('report activity', () => {
   test('group by type', () => {
     const ctx = createTestContext()
     ctx.runOK('contact', 'add', '--name', 'Jane', '--email', 'jane@acme.com')
-    ctx.runOK('log', 'note', 'jane@acme.com', 'N1')
-    ctx.runOK('log', 'note', 'jane@acme.com', 'N2')
-    ctx.runOK('log', 'call', 'jane@acme.com', 'C1')
+    ctx.runOK('log', 'note', 'N1', '--contact', 'jane@acme.com')
+    ctx.runOK('log', 'note', 'N2', '--contact', 'jane@acme.com')
+    ctx.runOK('log', 'call', 'C1', '--contact', 'jane@acme.com')
 
     const report = ctx.runJSON<unknown[]>(
       'report',
@@ -105,9 +105,9 @@ describe('report activity', () => {
     const ctx = createTestContext()
     ctx.runOK('contact', 'add', '--name', 'Jane', '--email', 'jane@acme.com')
     ctx.runOK('contact', 'add', '--name', 'Bob', '--email', 'bob@acme.com')
-    ctx.runOK('log', 'note', 'jane@acme.com', 'N1')
-    ctx.runOK('log', 'note', 'jane@acme.com', 'N2')
-    ctx.runOK('log', 'note', 'bob@acme.com', 'N3')
+    ctx.runOK('log', 'note', 'N1', '--contact', 'jane@acme.com')
+    ctx.runOK('log', 'note', 'N2', '--contact', 'jane@acme.com')
+    ctx.runOK('log', 'note', 'N3', '--contact', 'bob@acme.com')
 
     const report = ctx.runJSON<unknown[]>(
       'report',
@@ -123,8 +123,16 @@ describe('report activity', () => {
   test('period filter', () => {
     const ctx = createTestContext()
     ctx.runOK('contact', 'add', '--name', 'Jane', '--email', 'jane@acme.com')
-    ctx.runOK('log', 'note', 'jane@acme.com', 'Old', '--at', '2025-01-01')
-    ctx.runOK('log', 'note', 'jane@acme.com', 'Recent')
+    ctx.runOK(
+      'log',
+      'note',
+      'Old',
+      '--contact',
+      'jane@acme.com',
+      '--at',
+      '2025-01-01',
+    )
+    ctx.runOK('log', 'note', 'Recent', '--contact', 'jane@acme.com')
 
     const report = ctx.runJSON<Array<{ count: number }>>(
       'report',
@@ -150,7 +158,7 @@ describe('report stale', () => {
       '--email',
       'jane@acme.com',
     )
-    ctx.runOK('log', 'note', 'jane@acme.com', 'Just spoke')
+    ctx.runOK('log', 'note', 'Just spoke', '--contact', 'jane@acme.com')
     ctx.runOK(
       'contact',
       'add',
@@ -514,7 +522,7 @@ describe('report edge cases', () => {
   test('stale report with no stale entities shows message', () => {
     const ctx = createTestContext()
     ctx.runOK('contact', 'add', '--name', 'Active Jane', '--email', 'j@co.com')
-    ctx.runOK('log', 'note', 'j@co.com', 'Just talked')
+    ctx.runOK('log', 'note', 'Just talked', '--contact', 'j@co.com')
 
     const out = ctx.runOK('report', 'stale', '--days', '30')
     expect(out).toContain('No stale entities found')
