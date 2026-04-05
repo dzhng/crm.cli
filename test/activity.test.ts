@@ -110,6 +110,17 @@ describe('log', () => {
     expect(contacts[0].emails).toContain('nobody@example.com')
   })
 
+  test('--contact auto-creates contact from phone number', () => {
+    const ctx = createTestContext()
+    ctx.runOK('log', 'note', 'Cold call', '--contact', '+1-212-555-1234')
+
+    const contacts = ctx.runJSON<
+      Array<{ name: string; emails: string[]; phones: string[] }>
+    >('contact', 'list', '--format', 'json')
+    expect(contacts).toHaveLength(1)
+    expect(contacts[0].phones).toHaveLength(1)
+  })
+
   test('log with deal link', () => {
     const ctx = createTestContext()
     ctx.runOK('contact', 'add', '--name', 'Jane', '--email', 'jane@acme.com')

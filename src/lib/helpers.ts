@@ -7,7 +7,7 @@ import { openDB, upsertSearchIndex } from '../db'
 import type { Company, Contact, Deal } from '../drizzle-schema'
 import * as schema from '../drizzle-schema'
 import { companyToRow, contactToRow, dealToRow, safeJSON } from '../format'
-import { formatPhone } from '../normalize'
+import { formatPhone, tryNormalizePhone } from '../normalize'
 import { resolveCompanyForLink, resolveContact } from '../resolve'
 
 // ── Global option extraction ──
@@ -135,11 +135,20 @@ export async function getOrCreateContactId(
   const cid = makeId('ct')
   const n = now()
   const isEmail = ref.includes('@') && !ref.includes('/')
+  const normalizedPhone = isEmail
+    ? null
+    : tryNormalizePhone(ref, config.phone?.default_country)
+
+  let name = ref
+  if (isEmail) {
+    name = ref.split('@')[0]
+  }
+
   await db.insert(schema.contacts).values({
     id: cid,
-    name: isEmail ? ref.split('@')[0] : ref,
+    name,
     emails: isEmail ? JSON.stringify([ref]) : '[]',
-    phones: '[]',
+    phones: normalizedPhone ? JSON.stringify([normalizedPhone]) : '[]',
     companies: '[]',
     tags: '[]',
     custom_fields: '{}',
