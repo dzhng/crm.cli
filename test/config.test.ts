@@ -192,6 +192,198 @@ describe('config: pipeline stage changes', () => {
   })
 })
 
+describe('config: won_stage / lost_stage', () => {
+  test('custom won_stage used by report won', () => {
+    const ctx = createTestContext()
+    const configPath = join(ctx.dir, 'crm.toml')
+    writeFileSync(
+      configPath,
+      `[pipeline]\nstages = ["open", "demo", "won", "lost"]\nwon_stage = "won"\nlost_stage = "lost"\n`,
+    )
+    const id = ctx
+      .runOK(
+        '--config',
+        configPath,
+        'deal',
+        'add',
+        '--title',
+        'Custom Won',
+        '--value',
+        '5000',
+        '--stage',
+        'open',
+      )
+      .trim()
+    ctx.runOK('--config', configPath, 'deal', 'move', id, '--stage', 'won')
+
+    const report = ctx.runJSON<Array<{ title: string }>>(
+      '--config',
+      configPath,
+      'report',
+      'won',
+      '--format',
+      'json',
+    )
+    expect(report).toHaveLength(1)
+    expect(report[0].title).toBe('Custom Won')
+  })
+
+  test('custom lost_stage used by report lost', () => {
+    const ctx = createTestContext()
+    const configPath = join(ctx.dir, 'crm.toml')
+    writeFileSync(
+      configPath,
+      `[pipeline]\nstages = ["open", "demo", "won", "lost"]\nwon_stage = "won"\nlost_stage = "lost"\n`,
+    )
+    const id = ctx
+      .runOK(
+        '--config',
+        configPath,
+        'deal',
+        'add',
+        '--title',
+        'Custom Lost',
+        '--value',
+        '3000',
+        '--stage',
+        'open',
+      )
+      .trim()
+    ctx.runOK('--config', configPath, 'deal', 'move', id, '--stage', 'lost')
+
+    const report = ctx.runJSON<Array<{ title: string }>>(
+      '--config',
+      configPath,
+      'report',
+      'lost',
+      '--format',
+      'json',
+    )
+    expect(report).toHaveLength(1)
+    expect(report[0].title).toBe('Custom Lost')
+  })
+
+  test('stale report excludes deals at custom terminal stages', () => {
+    const ctx = createTestContext()
+    const configPath = join(ctx.dir, 'crm.toml')
+    writeFileSync(
+      configPath,
+      `[pipeline]\nstages = ["open", "done", "dropped"]\nwon_stage = "done"\nlost_stage = "dropped"\n`,
+    )
+    const id = ctx
+      .runOK(
+        '--config',
+        configPath,
+        'deal',
+        'add',
+        '--title',
+        'Done Deal',
+        '--stage',
+        'open',
+      )
+      .trim()
+    ctx.runOK('--config', configPath, 'deal', 'move', id, '--stage', 'done')
+
+    const report = ctx.runJSON<Array<{ title?: string }>>(
+      '--config',
+      configPath,
+      'report',
+      'stale',
+      '--type',
+      'deal',
+      '--format',
+      'json',
+    )
+    const titles = report.map((r) => r.title)
+    expect(titles).not.toContain('Done Deal')
+  })
+
+  test('forecast excludes deals at custom terminal stages', () => {
+    const ctx = createTestContext()
+    const configPath = join(ctx.dir, 'crm.toml')
+    writeFileSync(
+      configPath,
+      `[pipeline]\nstages = ["prospect", "closed", "rejected"]\nwon_stage = "closed"\nlost_stage = "rejected"\n`,
+    )
+    ctx.runOK(
+      '--config',
+      configPath,
+      'deal',
+      'add',
+      '--title',
+      'Open Deal',
+      '--value',
+      '1000',
+      '--stage',
+      'prospect',
+    )
+    const id2 = ctx
+      .runOK(
+        '--config',
+        configPath,
+        'deal',
+        'add',
+        '--title',
+        'Closed Deal',
+        '--value',
+        '2000',
+        '--stage',
+        'prospect',
+      )
+      .trim()
+    ctx.runOK('--config', configPath, 'deal', 'move', id2, '--stage', 'closed')
+
+    const report = ctx.runJSON<Array<{ title: string }>>(
+      '--config',
+      configPath,
+      'report',
+      'forecast',
+      '--format',
+      'json',
+    )
+    expect(report).toHaveLength(1)
+    expect(report[0].title).toBe('Open Deal')
+  })
+
+  test('defaults to closed-won/closed-lost when not specified', () => {
+    const ctx = createTestContext()
+    const id = ctx
+      .runOK('deal', 'add', '--title', 'Default Won', '--stage', 'lead')
+      .trim()
+    ctx.runOK('deal', 'move', id, '--stage', 'closed-won')
+
+    const report = ctx.runJSON<Array<{ title: string }>>(
+      'report',
+      'won',
+      '--format',
+      'json',
+    )
+    expect(report).toHaveLength(1)
+    expect(report[0].title).toBe('Default Won')
+  })
+
+  test('invalid toml is gracefully ignored', () => {
+    const ctx = createTestContext()
+    const configPath = join(ctx.dir, 'crm.toml')
+    writeFileSync(configPath, 'this is not valid toml {{{{')
+
+    // Should fall back to defaults and work fine
+    const id = ctx
+      .runOK(
+        '--config',
+        configPath,
+        'deal',
+        'add',
+        '--title',
+        'Test',
+        '--stage',
+        'lead',
+      )
+      .trim()
+    expect(id).toStartWith('dl_')
+  })
+})
+
 describe('config resolution', () => {
   test('--config flag takes highest priority', () => {
     const ctx = createTestContext()

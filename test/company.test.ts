@@ -960,3 +960,152 @@ describe('company auto-creation', () => {
     expect(companies).toHaveLength(1)
   })
 })
+
+describe('company list --filter', () => {
+  test('filter by exact name', () => {
+    const ctx = createTestContext()
+    ctx.runOK('company', 'add', '--name', 'Acme Corp')
+    ctx.runOK('company', 'add', '--name', 'Beta Inc')
+
+    const data = ctx.runJSON<Array<{ name: string }>>(
+      'company',
+      'list',
+      '--filter',
+      'name=Acme Corp',
+      '--format',
+      'json',
+    )
+    expect(data).toHaveLength(1)
+    expect(data[0].name).toBe('Acme Corp')
+  })
+
+  test('filter by custom field', () => {
+    const ctx = createTestContext()
+    ctx.runOK('company', 'add', '--name', 'SaaSCo', '--set', 'industry=SaaS')
+    ctx.runOK('company', 'add', '--name', 'FinCo', '--set', 'industry=Finance')
+
+    const data = ctx.runJSON<Array<{ name: string }>>(
+      'company',
+      'list',
+      '--filter',
+      'industry=SaaS',
+      '--format',
+      'json',
+    )
+    expect(data).toHaveLength(1)
+    expect(data[0].name).toBe('SaaSCo')
+  })
+
+  test('filter with != operator', () => {
+    const ctx = createTestContext()
+    ctx.runOK('company', 'add', '--name', 'Acme', '--set', 'industry=SaaS')
+    ctx.runOK('company', 'add', '--name', 'Beta', '--set', 'industry=Finance')
+    ctx.runOK('company', 'add', '--name', 'Gamma', '--set', 'industry=SaaS')
+
+    const data = ctx.runJSON<Array<{ name: string }>>(
+      'company',
+      'list',
+      '--filter',
+      'industry!=SaaS',
+      '--format',
+      'json',
+    )
+    expect(data).toHaveLength(1)
+    expect(data[0].name).toBe('Beta')
+  })
+
+  test('filter with ~= substring match', () => {
+    const ctx = createTestContext()
+    ctx.runOK('company', 'add', '--name', 'Acme Corp')
+    ctx.runOK('company', 'add', '--name', 'Beta Inc')
+    ctx.runOK('company', 'add', '--name', 'Acme Labs')
+
+    const data = ctx.runJSON<Array<{ name: string }>>(
+      'company',
+      'list',
+      '--filter',
+      'name~=Acme',
+      '--format',
+      'json',
+    )
+    expect(data).toHaveLength(2)
+  })
+
+  test('filter with OR logic', () => {
+    const ctx = createTestContext()
+    ctx.runOK('company', 'add', '--name', 'A', '--set', 'tier=gold')
+    ctx.runOK('company', 'add', '--name', 'B', '--set', 'tier=silver')
+    ctx.runOK('company', 'add', '--name', 'C', '--set', 'tier=bronze')
+
+    const data = ctx.runJSON<unknown[]>(
+      'company',
+      'list',
+      '--filter',
+      'tier=gold OR tier=silver',
+      '--format',
+      'json',
+    )
+    expect(data).toHaveLength(2)
+  })
+
+  test('filter returns empty when no match', () => {
+    const ctx = createTestContext()
+    ctx.runOK('company', 'add', '--name', 'Acme', '--set', 'industry=SaaS')
+
+    const data = ctx.runJSON<unknown[]>(
+      'company',
+      'list',
+      '--filter',
+      'industry=Healthcare',
+      '--format',
+      'json',
+    )
+    expect(data).toHaveLength(0)
+  })
+
+  test('filter combined with --tag', () => {
+    const ctx = createTestContext()
+    ctx.runOK(
+      'company',
+      'add',
+      '--name',
+      'A',
+      '--set',
+      'industry=SaaS',
+      '--tag',
+      'vip',
+    )
+    ctx.runOK(
+      'company',
+      'add',
+      '--name',
+      'B',
+      '--set',
+      'industry=SaaS',
+      '--tag',
+      'cold',
+    )
+    ctx.runOK(
+      'company',
+      'add',
+      '--name',
+      'C',
+      '--set',
+      'industry=Finance',
+      '--tag',
+      'vip',
+    )
+
+    const data = ctx.runJSON<unknown[]>(
+      'company',
+      'list',
+      '--filter',
+      'industry=SaaS',
+      '--tag',
+      'vip',
+      '--format',
+      'json',
+    )
+    expect(data).toHaveLength(1)
+  })
+})

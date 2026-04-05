@@ -714,3 +714,150 @@ describe('deal show', () => {
     expect(dlShow).toContain('Acme')
   })
 })
+
+describe('deal move --reason body', () => {
+  test('reason appears in stage-change activity body', () => {
+    const ctx = createTestContext()
+    const id = ctx
+      .runOK('deal', 'add', '--title', 'D', '--stage', 'lead')
+      .trim()
+    ctx.runOK(
+      'deal',
+      'move',
+      id,
+      '--stage',
+      'closed-lost',
+      '--reason',
+      'Too slow',
+    )
+
+    const activities = ctx.runJSON<Array<{ type: string; body: string }>>(
+      'activity',
+      'list',
+      '--deal',
+      id,
+      '--format',
+      'json',
+    )
+    const sc = activities.find((a) => a.type === 'stage-change')
+    expect(sc).toBeDefined()
+    expect(sc!.body).toContain('Too slow')
+    expect(sc!.body).toContain('closed-lost')
+  })
+
+  test('stage-change body contains from and to stages', () => {
+    const ctx = createTestContext()
+    const id = ctx
+      .runOK('deal', 'add', '--title', 'D', '--stage', 'lead')
+      .trim()
+    ctx.runOK('deal', 'move', id, '--stage', 'qualified')
+
+    const activities = ctx.runJSON<Array<{ type: string; body: string }>>(
+      'activity',
+      'list',
+      '--deal',
+      id,
+      '--format',
+      'json',
+    )
+    const sc = activities.find((a) => a.type === 'stage-change')
+    expect(sc!.body).toMatch(/from lead to qualified/)
+  })
+
+  test('note and reason both appear in body', () => {
+    const ctx = createTestContext()
+    const id = ctx
+      .runOK('deal', 'add', '--title', 'D', '--stage', 'lead')
+      .trim()
+    ctx.runOK(
+      'deal',
+      'move',
+      id,
+      '--stage',
+      'closed-won',
+      '--note',
+      'Signed contract',
+      '--reason',
+      'Good fit',
+    )
+
+    const activities = ctx.runJSON<Array<{ type: string; body: string }>>(
+      'activity',
+      'list',
+      '--deal',
+      id,
+      '--format',
+      'json',
+    )
+    const sc = activities.find((a) => a.type === 'stage-change')
+    expect(sc!.body).toContain('Signed contract')
+    expect(sc!.body).toContain('Good fit')
+  })
+
+  test('backward stage move is allowed', () => {
+    const ctx = createTestContext()
+    const id = ctx
+      .runOK('deal', 'add', '--title', 'Regress', '--stage', 'qualified')
+      .trim()
+    ctx.runOK('deal', 'move', id, '--stage', 'lead')
+
+    const data = ctx.runJSON<{ stage: string }>(
+      'deal',
+      'show',
+      id,
+      '--format',
+      'json',
+    )
+    expect(data.stage).toBe('lead')
+  })
+})
+
+describe('deal probability edge cases', () => {
+  test('probability 0 is allowed', () => {
+    const ctx = createTestContext()
+    const id = ctx
+      .runOK(
+        'deal',
+        'add',
+        '--title',
+        'Zero Prob',
+        '--value',
+        '1000',
+        '--probability',
+        '0',
+      )
+      .trim()
+    const data = ctx.runJSON<{ probability: number }>(
+      'deal',
+      'show',
+      id,
+      '--format',
+      'json',
+    )
+    expect(data.probability).toBe(0)
+  })
+
+  test('probability 100 is allowed', () => {
+    const ctx = createTestContext()
+    const id = ctx
+      .runOK(
+        'deal',
+        'add',
+        '--title',
+        'Sure Thing',
+        '--value',
+        '5000',
+        '--probability',
+        '100',
+      )
+      .trim()
+    const data = ctx.runJSON<{ probability: number }>(
+      'deal',
+      'show',
+      id,
+      '--format',
+      'json',
+    )
+    expect(data.probability).toBe(100)
+  })
+})

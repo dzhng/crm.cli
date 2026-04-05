@@ -241,3 +241,63 @@ describe('index', () => {
     expect(out).toContain('Jane')
   })
 })
+
+describe('search edge cases', () => {
+  test('search is case-insensitive', () => {
+    const ctx = createTestContext()
+    ctx.runOK('contact', 'add', '--name', 'Jane Doe')
+
+    const results = ctx.runJSON<unknown[]>('search', 'jane', '--format', 'json')
+    expect(results).toHaveLength(1)
+  })
+
+  test('search finds companies', () => {
+    const ctx = createTestContext()
+    ctx.runOK('company', 'add', '--name', 'Acme Corp')
+
+    const results = ctx.runJSON<Array<{ type: string }>>(
+      'search',
+      'Acme',
+      '--format',
+      'json',
+    )
+    expect(results.length).toBeGreaterThanOrEqual(1)
+    expect(results.some((r) => r.type === 'company')).toBe(true)
+  })
+
+  test('search finds deals', () => {
+    const ctx = createTestContext()
+    ctx.runOK('deal', 'add', '--title', 'Enterprise License')
+
+    const results = ctx.runJSON<Array<{ type: string }>>(
+      'search',
+      'Enterprise',
+      '--format',
+      'json',
+    )
+    expect(results.length).toBeGreaterThanOrEqual(1)
+    expect(results.some((r) => r.type === 'deal')).toBe(true)
+  })
+
+  test('search with special characters does not crash', () => {
+    const ctx = createTestContext()
+    ctx.runOK('contact', 'add', '--name', 'Jane')
+
+    // These should not throw — they should either return results or empty
+    const r1 = ctx.runJSON<unknown[]>(
+      'search',
+      'test@email.com',
+      '--format',
+      'json',
+    )
+    expect(Array.isArray(r1)).toBe(true)
+
+    const r2 = ctx.runJSON<unknown[]>(
+      'search',
+      'hello world',
+      '--format',
+      'json',
+    )
+    expect(Array.isArray(r2)).toBe(true)
+  })
+})

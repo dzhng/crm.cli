@@ -461,6 +461,122 @@ describe('contact list', () => {
     )
     expect(contacts).toHaveLength(1)
   })
+
+  test('filter with != operator', () => {
+    const ctx = createTestContext()
+    ctx.runOK('contact', 'add', '--name', 'Alice', '--set', 'role=CTO')
+    ctx.runOK('contact', 'add', '--name', 'Bob', '--set', 'role=Engineer')
+    ctx.runOK('contact', 'add', '--name', 'Charlie', '--set', 'role=CTO')
+
+    const contacts = ctx.runJSON<Array<{ name: string }>>(
+      'contact',
+      'list',
+      '--filter',
+      'role!=CTO',
+      '--format',
+      'json',
+    )
+    expect(contacts).toHaveLength(1)
+    expect(contacts[0].name).toBe('Bob')
+  })
+
+  test('filter with ~= substring match (case-insensitive)', () => {
+    const ctx = createTestContext()
+    ctx.runOK('contact', 'add', '--name', 'Alice Smith')
+    ctx.runOK('contact', 'add', '--name', 'Bob Jones')
+    ctx.runOK('contact', 'add', '--name', 'Charlie Smithson')
+
+    const contacts = ctx.runJSON<Array<{ name: string }>>(
+      'contact',
+      'list',
+      '--filter',
+      'name~=smith',
+      '--format',
+      'json',
+    )
+    expect(contacts).toHaveLength(2)
+  })
+
+  test('filter with > numeric comparison', () => {
+    const ctx = createTestContext()
+    ctx.runOK('contact', 'add', '--name', 'Small', '--set', 'score=10')
+    ctx.runOK('contact', 'add', '--name', 'Medium', '--set', 'score=50')
+    ctx.runOK('contact', 'add', '--name', 'Big', '--set', 'score=90')
+
+    const contacts = ctx.runJSON<Array<{ name: string }>>(
+      'contact',
+      'list',
+      '--filter',
+      'score>40',
+      '--format',
+      'json',
+    )
+    expect(contacts).toHaveLength(2)
+  })
+
+  test('filter with < numeric comparison', () => {
+    const ctx = createTestContext()
+    ctx.runOK('contact', 'add', '--name', 'Small', '--set', 'score=10')
+    ctx.runOK('contact', 'add', '--name', 'Big', '--set', 'score=90')
+
+    const contacts = ctx.runJSON<Array<{ name: string }>>(
+      'contact',
+      'list',
+      '--filter',
+      'score<50',
+      '--format',
+      'json',
+    )
+    expect(contacts).toHaveLength(1)
+    expect(contacts[0].name).toBe('Small')
+  })
+
+  test('filter with OR logic', () => {
+    const ctx = createTestContext()
+    ctx.runOK('contact', 'add', '--name', 'Alice', '--set', 'role=CTO')
+    ctx.runOK('contact', 'add', '--name', 'Bob', '--set', 'role=CEO')
+    ctx.runOK('contact', 'add', '--name', 'Charlie', '--set', 'role=Engineer')
+
+    const contacts = ctx.runJSON<unknown[]>(
+      'contact',
+      'list',
+      '--filter',
+      'role=CTO OR role=CEO',
+      '--format',
+      'json',
+    )
+    expect(contacts).toHaveLength(2)
+  })
+
+  test('filter on non-existent field returns nothing', () => {
+    const ctx = createTestContext()
+    ctx.runOK('contact', 'add', '--name', 'Alice')
+
+    const contacts = ctx.runJSON<unknown[]>(
+      'contact',
+      'list',
+      '--filter',
+      'nonexistent=value',
+      '--format',
+      'json',
+    )
+    expect(contacts).toHaveLength(0)
+  })
+
+  test('!= on missing field matches (null != X is true)', () => {
+    const ctx = createTestContext()
+    ctx.runOK('contact', 'add', '--name', 'Alice')
+
+    const contacts = ctx.runJSON<unknown[]>(
+      'contact',
+      'list',
+      '--filter',
+      'role!=CTO',
+      '--format',
+      'json',
+    )
+    expect(contacts).toHaveLength(1)
+  })
 })
 
 describe('contact edit', () => {
