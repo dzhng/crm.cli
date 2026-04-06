@@ -19,7 +19,7 @@ import { startDaemon } from './fuse-daemon'
 import { cleanArgv } from './lib/helpers'
 
 const program = new Command()
-program.name('crm').description('Headless CLI-first CRM').version('0.3.1')
+program.name('crm').description('Headless CLI-first CRM').version('0.3.2')
 program.exitOverride()
 
 registerContactCommands(program)
