@@ -1,4 +1,5 @@
 import { afterAll, describe, expect, test } from 'bun:test'
+import { spawnSync } from 'node:child_process'
 import {
   existsSync,
   mkdirSync,
@@ -7,6 +8,7 @@ import {
   unlinkSync,
   writeFileSync,
 } from 'node:fs'
+import { homedir } from 'node:os'
 import { join } from 'node:path'
 
 import { createTestContext, type TestContext } from './helpers.ts'
@@ -20,6 +22,49 @@ const canMount =
   existsSync('/dev/fuse') || // Linux FUSE
   (process.platform === 'darwin' &&
     Bun.spawnSync(['which', 'cargo']).exitCode === 0) // macOS NFS
+
+// Clean up stale FUSE mounts from previous interrupted test runs.
+// When a test run is killed (Ctrl+C, crash, OOM), afterAll never fires and
+// the detached crm-fuse/fuse-daemon processes survive. Without this cleanup,
+// they accumulate across runs and exhaust kernel FUSE connections.
+if (canMount && process.platform === 'linux') {
+  const crmDir = join(homedir(), '.crm')
+  if (existsSync(crmDir)) {
+    const pidFiles = readdirSync(crmDir).filter(
+      (f) => f.startsWith('mount-tmp-crm-test-') && f.endsWith('.pid'),
+    )
+    for (const f of pidFiles) {
+      const pidPath = join(crmDir, f)
+      try {
+        const pids = readFileSync(pidPath, 'utf-8').trim().split('\n')
+        for (const pid of pids) {
+          try {
+            process.kill(Number(pid))
+          } catch {
+            // already dead
+          }
+        }
+        unlinkSync(pidPath)
+      } catch {
+        // ignore
+      }
+    }
+    // Also clean up any stale test FUSE mounts still in the kernel
+    const mounts = spawnSync('bash', [
+      '-c',
+      "mount | grep 'fuse\\.crm-fuse' | grep '/tmp/crm-test-' | awk '{print $3}'",
+    ])
+    if (mounts.stdout) {
+      for (const mp of mounts.stdout.toString().trim().split('\n')) {
+        if (mp) {
+          spawnSync('fusermount', ['-u', mp], {
+            stdio: ['pipe', 'pipe', 'pipe'],
+          })
+        }
+      }
+    }
+  }
+}
 
 interface FuseTestContext extends TestContext {
   mounted: boolean
@@ -1737,44 +1782,6 @@ describe('fuse: readonly mode', () => {
 })
 
 // ---------------------------------------------------------------------------
-// Lifecycle
-// ---------------------------------------------------------------------------
-
-describe('fuse: mount/unmount', () => {
-  test('unmount cleans up', () => {
-    if (process.platform === 'darwin') {
-      return
-    }
-    const ctx = createFuseTestContext()
-    if (skipIfNoFuse(ctx)) {
-      return
-    }
-
-    unmount(ctx)
-
-    const entries = readdirSync(ctx.mountPoint)
-    expect(entries).toHaveLength(0)
-  })
-
-  test('double mount to same path fails gracefully', () => {
-    if (process.platform === 'darwin') {
-      return
-    }
-    const ctx = createFuseTestContext()
-    if (skipIfNoFuse(ctx)) {
-      return
-    }
-    try {
-      // Second mount to the same path should fail
-      const result = ctx.run('mount', ctx.mountPoint)
-      expect(result.exitCode).not.toBe(0)
-    } finally {
-      unmountIfNotShared(ctx)
-    }
-  })
-})
-
-// ---------------------------------------------------------------------------
 // Live sync: CLI changes appear in FS immediately
 // ---------------------------------------------------------------------------
 
@@ -1843,5 +1850,43 @@ describe('fuse: live sync', () => {
     } finally {
       unmountIfNotShared(ctx)
     }
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Lifecycle — must be LAST: "unmount cleans up" destroys the shared mount
+// ---------------------------------------------------------------------------
+
+describe('fuse: mount/unmount', () => {
+  test('double mount to same path fails gracefully', () => {
+    if (process.platform === 'darwin') {
+      return
+    }
+    const ctx = createFuseTestContext()
+    if (skipIfNoFuse(ctx)) {
+      return
+    }
+    try {
+      // Second mount to the same path should fail
+      const result = ctx.run('mount', ctx.mountPoint)
+      expect(result.exitCode).not.toBe(0)
+    } finally {
+      unmountIfNotShared(ctx)
+    }
+  })
+
+  test('unmount cleans up', () => {
+    if (process.platform === 'darwin') {
+      return
+    }
+    const ctx = createFuseTestContext()
+    if (skipIfNoFuse(ctx)) {
+      return
+    }
+
+    unmount(ctx)
+
+    const entries = readdirSync(ctx.mountPoint)
+    expect(entries).toHaveLength(0)
   })
 })

@@ -340,6 +340,17 @@ async function unmountDarwin(mp: string) {
 }
 
 function unmountLinux(mp: string) {
+  // Unmount first so the kernel cleanly tears down the FUSE session — the
+  // helper receives the destroy callback and exits naturally. Both orderings
+  // produce identical results on Linux (empirically verified), but unmount-
+  // first is the canonical FUSE teardown sequence.
+  const result = spawnSync('fusermount', ['-u', mp], {
+    stdio: ['pipe', 'pipe', 'pipe'],
+  })
+  if (result.status !== 0) {
+    spawnSync('umount', [mp], { stdio: ['pipe', 'pipe', 'pipe'] })
+  }
+
   const pidFile = join(homedir(), '.crm', `mount-${slugify(mp)}.pid`)
   if (existsSync(pidFile)) {
     const pids = readFileSync(pidFile, 'utf-8').trim().split('\n')
@@ -352,11 +363,13 @@ function unmountLinux(mp: string) {
     }
     unlinkSync(pidFile)
   }
-  const result = spawnSync('fusermount', ['-u', mp], {
-    stdio: ['pipe', 'pipe', 'pipe'],
-  })
-  if (result.status !== 0) {
-    spawnSync('umount', [mp], { stdio: ['pipe', 'pipe', 'pipe'] })
+
+  // Clean up the daemon socket (not removed by kill alone)
+  const socketPath = join(homedir(), '.crm', `fuse-${slugify(mp)}.sock`)
+  try {
+    unlinkSync(socketPath)
+  } catch {
+    // may not exist
   }
 }
 
