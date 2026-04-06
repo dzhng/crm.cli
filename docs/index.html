@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>crm.cli — Your CRM is a filesystem</title>
+  <meta name="description" content="A headless, CLI-first CRM for developers who do sales. Contacts, deals, and pipeline in a single SQLite file — mountable as a virtual filesystem.">
+  <meta property="og:title" content="crm.cli — Your CRM is a filesystem">
+  <meta property="og:description" content="A headless, CLI-first CRM for developers. Single SQLite file, pipe-friendly, mountable as a virtual filesystem for AI agents.">
+  <meta property="og:type" content="website">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📇</text></svg>">
+  <style>
+    :root {
+      --bg: #0d1117;
+      --surface: #161b22;
+      --border: #30363d;
+      --text: #e6edf3;
+      --text-muted: #8b949e;
+      --accent: #58a6ff;
+      --green: #3fb950;
+      --purple: #bc8cff;
+      --orange: #d29922;
+      --code-bg: #0d1117;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+    }
+
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    .container {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+
+    /* Nav */
+    nav {
+      border-bottom: 1px solid var(--border);
+      padding: 16px 0;
+    }
+    nav .container {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    nav .logo {
+      font-family: 'SF Mono', SFMono-Regular, ui-monospace, Menlo, monospace;
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--text);
+    }
+    nav .links { display: flex; gap: 24px; }
+    nav .links a { color: var(--text-muted); font-size: 14px; }
+    nav .links a:hover { color: var(--text); text-decoration: none; }
+
+    /* Hero */
+    .hero {
+      padding: 80px 0 60px;
+      text-align: center;
+    }
+    .hero h1 {
+      font-family: 'SF Mono', SFMono-Regular, ui-monospace, Menlo, monospace;
+      font-size: 48px;
+      font-weight: 800;
+      margin-bottom: 16px;
+      letter-spacing: -1px;
+    }
+    .hero h1 .dot { color: var(--accent); }
+    .hero .tagline {
+      font-size: 20px;
+      color: var(--text-muted);
+      max-width: 640px;
+      margin: 0 auto 32px;
+    }
+    .hero .install-box {
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 20px;
+      font-family: 'SF Mono', SFMono-Regular, ui-monospace, Menlo, monospace;
+      font-size: 15px;
+      margin-bottom: 16px;
+    }
+    .hero .install-box .prompt { color: var(--green); }
+    .hero .sub { color: var(--text-muted); font-size: 14px; }
+    .hero .sub a { color: var(--accent); }
+
+    /* Feature grid */
+    .features {
+      padding: 60px 0;
+      border-top: 1px solid var(--border);
+    }
+    .features h2 {
+      font-size: 32px;
+      font-weight: 700;
+      margin-bottom: 40px;
+      text-align: center;
+    }
+    .feature-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 24px;
+    }
+    .feature-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 24px;
+    }
+    .feature-card .icon {
+      font-size: 28px;
+      margin-bottom: 12px;
+    }
+    .feature-card h3 {
+      font-size: 18px;
+      margin-bottom: 8px;
+    }
+    .feature-card p {
+      color: var(--text-muted);
+      font-size: 14px;
+      line-height: 1.7;
+    }
+
+    /* Code blocks */
+    .code-section {
+      padding: 60px 0;
+      border-top: 1px solid var(--border);
+    }
+    .code-section h2 {
+      font-size: 32px;
+      font-weight: 700;
+      margin-bottom: 12px;
+    }
+    .code-section > .container > p {
+      color: var(--text-muted);
+      margin-bottom: 32px;
+      font-size: 16px;
+    }
+    .code-examples {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 24px;
+    }
+    .code-example h3 {
+      font-size: 14px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--text-muted);
+      margin-bottom: 12px;
+    }
+    pre {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 20px;
+      overflow-x: auto;
+      font-family: 'SF Mono', SFMono-Regular, ui-monospace, Menlo, monospace;
+      font-size: 13px;
+      line-height: 1.8;
+    }
+    pre .comment { color: var(--text-muted); }
+    pre .cmd { color: var(--green); }
+    pre .flag { color: var(--purple); }
+    pre .string { color: var(--orange); }
+    pre .prompt { color: var(--text-muted); }
+
+    /* FUSE section */
+    .fuse-section {
+      padding: 60px 0;
+      border-top: 1px solid var(--border);
+    }
+    .fuse-section h2 {
+      font-size: 32px;
+      font-weight: 700;
+      margin-bottom: 12px;
+    }
+    .fuse-section > .container > p {
+      color: var(--text-muted);
+      margin-bottom: 32px;
+      font-size: 16px;
+      max-width: 720px;
+    }
+    .fuse-layout {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+    }
+    @media (max-width: 640px) {
+      .fuse-layout { grid-template-columns: 1fr; }
+    }
+    .fuse-layout pre {
+      font-size: 12px;
+      line-height: 1.7;
+    }
+
+    /* Sponsor */
+    .sponsor {
+      padding: 60px 0;
+      border-top: 1px solid var(--border);
+      text-align: center;
+    }
+    .sponsor-card {
+      display: inline-flex;
+      flex-direction: column;
+      align-items: center;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 40px 48px;
+      max-width: 600px;
+    }
+    .sponsor-card .label {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      color: var(--text-muted);
+      margin-bottom: 16px;
+    }
+    .sponsor-card .duet-name {
+      font-size: 32px;
+      font-weight: 700;
+      margin-bottom: 12px;
+    }
+    .sponsor-card .duet-name a {
+      color: var(--text);
+    }
+    .sponsor-card .duet-name a:hover {
+      color: var(--accent);
+    }
+    .sponsor-card .desc {
+      color: var(--text-muted);
+      font-size: 15px;
+      line-height: 1.7;
+      margin-bottom: 20px;
+    }
+    .sponsor-card .cta {
+      display: inline-block;
+      background: var(--accent);
+      color: var(--bg);
+      font-weight: 600;
+      padding: 10px 24px;
+      border-radius: 6px;
+      font-size: 14px;
+    }
+    .sponsor-card .cta:hover {
+      opacity: 0.9;
+      text-decoration: none;
+    }
+
+    /* Footer */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 32px 0;
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 14px;
+    }
+    footer a { color: var(--text-muted); }
+    footer a:hover { color: var(--text); }
+
+    @media (max-width: 640px) {
+      .hero h1 { font-size: 32px; }
+      .hero .tagline { font-size: 16px; }
+      .hero .install-box { font-size: 13px; padding: 10px 16px; }
+      .features h2, .code-section h2, .fuse-section h2 { font-size: 24px; }
+    }
+  </style>
+</head>
+<body>
+
+<nav>
+  <div class="container">
+    <span class="logo">crm<span style="color:var(--accent)">.</span>cli</span>
+    <div class="links">
+      <a href="https://github.com/dzhng/crm.cli">GitHub</a>
+      <a href="https://www.npmjs.com/package/crm.cli">npm</a>
+      <a href="https://github.com/dzhng/crm.cli#cli-reference">Docs</a>
+      <a href="https://duet.so">Duet</a>
+    </div>
+  </div>
+</nav>
+
+<section class="hero">
+  <div class="container">
+    <h1>crm<span class="dot">.</span>cli</h1>
+    <p class="tagline">A headless, CLI-first CRM for developers who do sales. Contacts, deals, and pipeline in a single SQLite file &mdash; mountable as a virtual filesystem so AI agents get full CRM access for free.</p>
+    <div class="install-box">
+      <span class="prompt">$</span> bun install -g crm.cli
+    </div>
+    <p class="sub">No server. No Docker. No accounts. No GUI. <a href="https://github.com/dzhng/crm.cli">View on GitHub &rarr;</a></p>
+  </div>
+</section>
+
+<section class="features">
+  <div class="container">
+    <h2>Built for how you actually work</h2>
+    <div class="feature-grid">
+      <div class="feature-card">
+        <div class="icon">📂</div>
+        <h3>Your CRM is a filesystem</h3>
+        <p>Mount with <code>crm mount ~/crm</code> and every tool that reads files &mdash; AI agents, shell scripts, editors &mdash; gets full CRM access. No MCP servers, no API keys. The filesystem is the universal API.</p>
+      </div>
+      <div class="feature-card">
+        <div class="icon">🤖</div>
+        <h3>AI-native</h3>
+        <p>Point Claude Code, Codex, or any AI agent at <code>~/crm</code> and ask it to research your pipeline, draft outreach, or update deals. The agent reads and writes JSON files &mdash; zero integration code.</p>
+      </div>
+      <div class="feature-card">
+        <div class="icon">🔬</div>
+        <h3>Deep normalization</h3>
+        <p>E.164 phone normalization, website normalization, social handle extraction from URLs, entity merge with reference relinking, and fuzzy duplicate detection. What a spreadsheet can never provide.</p>
+      </div>
+      <div class="feature-card">
+        <div class="icon">🔧</div>
+        <h3>Unix philosophy</h3>
+        <p>Every command outputs structured data. Pipe to <code>jq</code>, <code>grep</code>, <code>awk</code>, or feed into scripts. <code>--format json|csv|tsv|ids</code> on everything. Composable by design.</p>
+      </div>
+      <div class="feature-card">
+        <div class="icon">💾</div>
+        <h3>Single SQLite file</h3>
+        <p>Everything lives in <code>~/.crm/crm.db</code>. Back it up by copying the file. Share it via git, Dropbox, or rsync. No server, no network, no dependencies.</p>
+      </div>
+      <div class="feature-card">
+        <div class="icon">📊</div>
+        <h3>Pipeline reports</h3>
+        <p>Built-in reports: pipeline summary, stage conversion rates, deal velocity, weighted forecast, stale contacts, won/lost analysis. All from the command line, all pipeable.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="code-section">
+  <div class="container">
+    <h2>Quick start</h2>
+    <p>Install in one command, start managing contacts and deals in seconds.</p>
+    <div class="code-examples">
+      <div class="code-example">
+        <h3>Manage contacts</h3>
+        <pre><span class="comment"># Add a contact with full normalization</span>
+<span class="prompt">$</span> <span class="cmd">crm contact add</span> <span class="flag">--name</span> <span class="string">"Jane Doe"</span> \
+    <span class="flag">--email</span> jane@acme.com \
+    <span class="flag">--phone</span> <span class="string">"+1-212-555-1234"</span> \
+    <span class="flag">--linkedin</span> linkedin.com/in/janedoe \
+    <span class="flag">--company</span> Acme
+<span class="comment"># Phone → E.164, LinkedIn URL → handle, company auto-linked</span>
+
+<span class="prompt">$</span> <span class="cmd">crm contact show</span> jane@acme.com
+<span class="prompt">$</span> <span class="cmd">crm contact show</span> <span class="string">"(212) 555-1234"</span>  <span class="comment"># same contact — any format works</span></pre>
+      </div>
+      <div class="code-example">
+        <h3>Track deals</h3>
+        <pre><span class="prompt">$</span> <span class="cmd">crm deal add</span> <span class="flag">--title</span> <span class="string">"Acme Enterprise"</span> <span class="flag">--value</span> 50000 \
+    <span class="flag">--contact</span> jane@acme.com <span class="flag">--stage</span> qualified
+
+<span class="prompt">$</span> <span class="cmd">crm deal move</span> dl_01J8Z... <span class="flag">--stage</span> negotiation
+<span class="prompt">$</span> <span class="cmd">crm pipeline</span>
+<span class="comment"># Visual pipeline with counts, values, weighted totals</span>
+
+<span class="prompt">$</span> <span class="cmd">crm report</span> conversion
+<span class="comment"># Stage-to-stage conversion rates</span></pre>
+      </div>
+      <div class="code-example">
+        <h3>Compose with Unix tools</h3>
+        <pre><span class="comment"># Bulk tag all contacts from Acme</span>
+<span class="prompt">$</span> <span class="cmd">crm contact list</span> <span class="flag">--company</span> Acme <span class="flag">--format</span> ids | xargs -I{} <span class="cmd">crm tag</span> {} enterprise
+
+<span class="comment"># Export pipeline as JSON, filter with jq</span>
+<span class="prompt">$</span> <span class="cmd">crm deal list</span> <span class="flag">--format</span> json | jq '.[] | select(.value > 10000)'
+
+<span class="comment"># Import from CSV</span>
+<span class="prompt">$</span> <span class="cmd">crm import</span> contacts leads.csv</pre>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="fuse-section">
+  <div class="container">
+    <h2>Virtual filesystem for AI agents</h2>
+    <p>Mount the CRM and every AI agent gets instant access. No MCP servers, no API keys, no integration code. Just files.</p>
+    <div class="fuse-layout">
+      <div>
+        <pre><span class="comment"># Mount</span>
+<span class="prompt">$</span> <span class="cmd">crm mount</span> ~/crm
+
+<span class="comment"># Browse contacts</span>
+<span class="prompt">$</span> ls ~/crm/contacts/
+<span class="prompt">$</span> cat ~/crm/contacts/ct_01...jane-doe.json
+
+<span class="comment"># Look up by email or phone</span>
+<span class="prompt">$</span> cat ~/crm/contacts/_by-email/jane@acme.com.json
+<span class="prompt">$</span> cat ~/crm/contacts/_by-phone/+12125551234.json
+
+<span class="comment"># Pipeline stages</span>
+<span class="prompt">$</span> ls ~/crm/deals/_by-stage/qualified/
+
+<span class="comment"># Search via virtual files</span>
+<span class="prompt">$</span> cat ~/crm/search/<span class="string">"fintech CTO"</span>.json
+
+<span class="comment"># Reports</span>
+<span class="prompt">$</span> cat ~/crm/reports/forecast.json</pre>
+      </div>
+      <div>
+        <pre><span class="comment"># Filesystem layout</span>
+~/crm/
+├── contacts/
+│   ├── ct_01...jane-doe.json
+│   ├── _by-email/
+│   ├── _by-phone/
+│   ├── _by-linkedin/
+│   ├── _by-company/
+│   └── _by-tag/
+├── companies/
+│   ├── co_01...acme-corp.json
+│   ├── _by-website/
+│   └── _by-tag/
+├── deals/
+│   ├── dl_01...acme-enterprise.json
+│   ├── _by-stage/
+│   └── _by-company/
+├── activities/
+│   ├── _by-contact/
+│   └── _by-type/
+├── reports/
+│   ├── pipeline.json
+│   ├── stale.json
+│   └── forecast.json
+├── search/
+└── tags.json</pre>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="sponsor">
+  <div class="container">
+    <div class="sponsor-card">
+      <div class="label">Sponsored by</div>
+      <div class="duet-name"><a href="https://duet.so">Duet</a></div>
+      <p class="desc">crm.cli is sponsored by <a href="https://duet.so">Duet</a> &mdash; a cloud agent workspace where every user gets a private cloud computer with a persistent, always-on AI agent. Set up crm.cli in your own Duet workspace and run it with Claude Code or Codex in the cloud &mdash; no local setup required.</p>
+      <a href="https://duet.so" class="cta">Try Duet &rarr;</a>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="container">
+    <p>MIT License &middot; <a href="https://github.com/dzhng/crm.cli">GitHub</a> &middot; <a href="https://www.npmjs.com/package/crm.cli">npm</a> &middot; Sponsored by <a href="https://duet.so">Duet</a></p>
+  </div>
+</footer>
+
+</body>
+</html>

@@ -6,6 +6,8 @@
 
 No server. No Docker. No accounts. No GUI. Just `bun install -g crm.cli` and go.
 
+> **Sponsored by [Duet](https://duet.so)** — a cloud agent workspace with persistent AI. Set up crm.cli in your own private cloud computer and run it with Claude Code or Codex — no local setup required. [Try Duet &rarr;](https://duet.so)
+
 ## Why crm.cli
 
 Existing CRMs are GUI-first tools built for sales teams. If you're a technical founder, indie hacker, or engineer running BD, you're probably managing contacts in a spreadsheet you grep through. crm.cli is built for you.
@@ -1290,6 +1292,14 @@ GitHub Actions pipeline:
 
 - **On push to main:** Run all tests via `bun test`
 - **On tag (`v*`):** Build binaries for all platforms, publish to npm, create GitHub Release with assets
+
+---
+
+## Sponsor
+
+crm.cli is sponsored by **[Duet](https://duet.so)** — a cloud agent workspace where every user gets a private cloud computer with a persistent, always-on AI agent. Set up crm.cli in your own Duet workspace and run it with Claude Code or Codex in the cloud — no local setup required.
+
+[Try Duet &rarr;](https://duet.so)
 
 ---
 
