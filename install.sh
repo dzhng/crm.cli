@@ -89,7 +89,7 @@ esac
 
 # Install FUSE dependencies
 echo ""
-echo "Installing FUSE dependencies..."
+echo "Installing mount dependencies..."
 case "$PLATFORM" in
   linux)
     if command -v apt-get >/dev/null 2>&1; then
@@ -103,15 +103,12 @@ case "$PLATFORM" in
     fi
     ;;
   darwin)
-    if command -v brew >/dev/null 2>&1; then
-      if brew list fuse-t >/dev/null 2>&1; then
-        echo "FUSE-T already installed."
-      else
-        echo "Installing FUSE-T..."
-        brew install fuse-t
-      fi
+    if command -v cargo >/dev/null 2>&1; then
+      echo "Rust toolchain found."
     else
-      echo "Warning: Homebrew not found. Install FUSE-T manually: https://www.fuse-t.org/"
+      echo "Installing Rust toolchain (needed for NFS server on macOS)..."
+      curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+      . "$HOME/.cargo/env"
     fi
     ;;
 esac

@@ -16,3 +16,6 @@ Thumbs.db
 # FUSE smoke test artifacts
 test/fuse-smoke/hello_fuse
 test/fuse-smoke/mnt/
+test/nfs-smoke/bin/
+test/nfs-smoke/.nfsserve/
+src/nfs-server/target/

@@ -21,36 +21,351 @@ function ensureDir(dir: string): void {
   }
 }
 
-// Parse a .pc file and return [cflags..., libs...] without needing pkg-config.
-function parsePcFlags(pcFile: string): string[] | null {
-  if (!existsSync(pcFile)) {
-    return null
+// ── macOS NFS mount (no FUSE dependency) ──
+
+async function mountDarwin(
+  mp: string,
+  config: {
+    database: { path: string }
+    pipeline: { stages: string[] }
+    mount: { readonly?: boolean }
+  },
+  _opts: { readonly?: boolean },
+) {
+  const nfsHelperPath = join(homedir(), '.crm', 'bin', 'crm-nfs')
+
+  if (!existsSync(nfsHelperPath)) {
+    // Auto-compile the Rust NFS server
+    const nfsSrcDir = join(import.meta.dir, '..', 'nfs-server')
+    if (!existsSync(join(nfsSrcDir, 'Cargo.toml'))) {
+      die(`Error: NFS server source not found at ${nfsSrcDir}`)
+    }
+    ensureDir(join(homedir(), '.crm', 'bin'))
+    const cargoPath =
+      spawnSync('which', ['cargo'], { stdio: ['pipe', 'pipe', 'pipe'] })
+        .stdout?.toString()
+        .trim() || join(homedir(), '.cargo', 'bin', 'cargo')
+    if (!existsSync(cargoPath)) {
+      die(
+        "Error: Rust not found. Install with: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh",
+      )
+    }
+    console.log('Compiling NFS server (first time only)...')
+    const compile = spawnSync(
+      cargoPath,
+      ['build', '--release', '--manifest-path', join(nfsSrcDir, 'Cargo.toml')],
+      { stdio: ['pipe', 'pipe', 'pipe'] },
+    )
+    if (compile.status !== 0) {
+      die(
+        `Error: Failed to compile NFS server.\n${compile.stderr?.toString() || ''}`,
+      )
+    }
+    // cat > strips com.apple.provenance which macOS adds to Cargo-built
+    // binaries — the attribute causes SIGKILL when spawned as a child process
+    const built = join(nfsSrcDir, 'target', 'release', 'crm-nfs')
+    spawnSync('sh', [
+      '-c',
+      `cat "${built}" > "${nfsHelperPath}" && chmod +x "${nfsHelperPath}"`,
+    ])
   }
-  const content = readFileSync(pcFile, 'utf-8')
-  const vars: Record<string, string> = {}
-  for (const line of content.split('\n')) {
-    const m = line.match(/^(\w+)=(.*)$/)
-    if (m) {
-      vars[m[1]] = m[2]
+
+  // Start the TS daemon (same as before — handles all business logic)
+  const socketPath = join(homedir(), '.crm', `fuse-${slugify(mp)}.sock`)
+  const daemonPath = join(import.meta.dir, '..', 'fuse-daemon.ts')
+
+  const daemonProc = spawn(
+    'bun',
+    [
+      'run',
+      daemonPath,
+      socketPath,
+      config.database.path,
+      ...config.pipeline.stages,
+    ],
+    { stdio: 'ignore', detached: true },
+  )
+  daemonProc.unref()
+
+  // Wait for daemon socket
+  const deadline = Date.now() + 5000
+  while (Date.now() < deadline) {
+    if (existsSync(socketPath)) {
+      break
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50))
+  }
+  if (!existsSync(socketPath)) {
+    daemonProc.kill()
+    die('Error: FUSE daemon failed to start.')
+  }
+
+  // Start the NFS server (port 0 = auto-assign)
+  const nfsProc = spawn(nfsHelperPath, [socketPath, '0'], {
+    stdio: ['pipe', 'pipe', 'pipe'],
+    detached: true,
+  })
+
+  // Read the port from the NFS server's stdout (first line)
+  const port = await new Promise<number>((resolve, reject) => {
+    let buf = ''
+    const timeout = setTimeout(
+      () => reject(new Error('NFS server did not report port')),
+      5000,
+    )
+    nfsProc.stdout?.on('data', (chunk: Buffer) => {
+      buf += chunk.toString()
+      const nl = buf.indexOf('\n')
+      if (nl !== -1) {
+        clearTimeout(timeout)
+        resolve(Number(buf.slice(0, nl).trim()))
+      }
+    })
+    nfsProc.on('exit', (code) => {
+      clearTimeout(timeout)
+      reject(new Error(`NFS server exited with code ${code}`))
+    })
+  }).catch((err) => {
+    daemonProc.kill()
+    try {
+      nfsProc.kill()
+    } catch {
+      // already dead
+    }
+    die(`Error: ${err.message}`)
+    return 0 // unreachable but satisfies TS
+  })
+
+  // Detach stdio so the CLI process can exit while NFS server keeps running
+  nfsProc.stdout?.destroy()
+  nfsProc.stderr?.destroy()
+  nfsProc.stdin?.destroy()
+  nfsProc.unref()
+
+  // Wait for the NFS server to actually accept connections before mounting.
+  // Without this, mount_nfs connects before handle_forever() starts and the
+  // NFS client sits in "not responding" for the full timeo duration.
+  const connDeadline = Date.now() + 3000
+  while (Date.now() < connDeadline) {
+    try {
+      const net = await import('node:net')
+      const ok = await new Promise<boolean>((resolve) => {
+        const sock = net.createConnection({ host: '127.0.0.1', port }, () => {
+          sock.destroy()
+          resolve(true)
+        })
+        sock.on('error', () => resolve(false))
+      })
+      if (ok) {
+        break
+      }
+    } catch {
+      // not ready
+    }
+    await new Promise((r) => setTimeout(r, 50))
+  }
+
+  // Mount via macOS's built-in NFS client
+  const mountResult = spawnSync(
+    '/sbin/mount_nfs',
+    [
+      '-o',
+      `locallocks,vers=3,tcp,port=${port},mountport=${port},soft,intr,timeo=10,retrans=3,noac`,
+      '127.0.0.1:/',
+      mp,
+    ],
+    { stdio: ['pipe', 'pipe', 'pipe'] },
+  )
+  if (mountResult.status !== 0) {
+    daemonProc.kill()
+    try {
+      nfsProc.kill()
+    } catch {
+      // already dead
+    }
+    die(
+      `Error: NFS mount failed: ${mountResult.stderr?.toString() || 'unknown error'}`,
+    )
+  }
+
+  // Write PID file (same format: line 1 = server PID, line 2 = daemon PID)
+  const pidFile = join(homedir(), '.crm', `mount-${slugify(mp)}.pid`)
+  writeFileSync(pidFile, `${nfsProc.pid}\n${daemonProc.pid}`)
+
+  console.log(`Mounted at ${mp} (NFS port ${port}, PID ${nfsProc.pid})`)
+}
+
+// ── Linux FUSE mount ──
+
+async function mountLinux(
+  mp: string,
+  config: {
+    database: { path: string }
+    pipeline: { stages: string[] }
+    mount: { readonly?: boolean }
+  },
+  opts: { readonly?: boolean },
+) {
+  const helperPath = join(homedir(), '.crm', 'bin', 'crm-fuse')
+
+  if (!existsSync(helperPath)) {
+    const srcPath = join(import.meta.dir, '..', 'fuse-helper.c')
+    if (!existsSync(srcPath)) {
+      die(
+        'Error: FUSE helper not found. Install FUSE dependencies and rebuild, or use `crm export-fs` instead.',
+      )
+    }
+    ensureDir(join(homedir(), '.crm', 'bin'))
+    const fuseFlags = (() => {
+      const pc3 = spawnSync('pkg-config', ['--cflags', '--libs', 'fuse3'])
+      if (pc3.status === 0 && pc3.stdout) {
+        return pc3.stdout.toString().trim().split(/\s+/)
+      }
+      return ['-lfuse3', '-lpthread']
+    })()
+    const compile = spawnSync(
+      'gcc',
+      ['-o', helperPath, srcPath, ...fuseFlags],
+      { stdio: ['pipe', 'pipe', 'pipe'] },
+    )
+    if (compile.status !== 0) {
+      die(
+        `Error: Failed to compile FUSE helper. Install libfuse3-dev (apt) or fuse3-devel (yum).\n${compile.stderr?.toString() || ''}`,
+      )
     }
   }
-  const expand = (s: string): string =>
-    s.replace(/\$\{(\w+)\}/g, (_, k) => expand(vars[k] ?? ''))
-  const libs = content.match(/^Libs:\s*(.+)$/m)?.[1]
-  const cflags = content.match(/^Cflags:\s*(.+)$/m)?.[1]
-  if (!(libs && cflags)) {
-    return null
+
+  // Start the TS daemon
+  const socketPath = join(homedir(), '.crm', `fuse-${slugify(mp)}.sock`)
+  const daemonPath = join(import.meta.dir, '..', 'fuse-daemon.ts')
+
+  const daemonProc = spawn(
+    'bun',
+    [
+      'run',
+      daemonPath,
+      socketPath,
+      config.database.path,
+      ...config.pipeline.stages,
+    ],
+    { stdio: 'ignore', detached: true },
+  )
+  daemonProc.unref()
+
+  // Wait for daemon socket
+  const deadline = Date.now() + 5000
+  while (Date.now() < deadline) {
+    if (existsSync(socketPath)) {
+      break
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50))
   }
-  return [
-    ...expand(cflags).trim().split(/\s+/),
-    ...expand(libs).trim().split(/\s+/),
-  ].filter(Boolean)
+  if (!existsSync(socketPath)) {
+    daemonProc.kill()
+    die('Error: FUSE daemon failed to start.')
+  }
+
+  // Spawn the FUSE helper
+  const fuseArgs = ['-f', mp, '--', socketPath]
+  if (opts.readonly || config.mount.readonly) {
+    fuseArgs.unshift('-o', 'ro')
+  }
+
+  const fuseProc = spawn(helperPath, fuseArgs, {
+    stdio: 'ignore',
+    detached: true,
+  })
+
+  await new Promise((resolve) => setTimeout(resolve, 500))
+
+  if (fuseProc.exitCode !== null) {
+    daemonProc.kill()
+    die('Error: FUSE mount failed. Is FUSE available?')
+  }
+
+  fuseProc.unref()
+
+  const pidFile = join(homedir(), '.crm', `mount-${slugify(mp)}.pid`)
+  writeFileSync(pidFile, `${fuseProc.pid}\n${daemonProc.pid}`)
+
+  console.log(`Mounted at ${mp} (PID ${fuseProc.pid})`)
 }
+
+// ── Unmount ──
+
+async function unmountDarwin(mp: string) {
+  const pidFile = join(homedir(), '.crm', `mount-${slugify(mp)}.pid`)
+
+  if (existsSync(pidFile)) {
+    const lines = readFileSync(pidFile, 'utf-8').trim().split('\n')
+    const serverPid = Number(lines[0])
+    const daemonPid = lines[1] ? Number(lines[1]) : null
+
+    // Kill NFS server first and wait for exit — umount while the server
+    // is alive panics the macOS NFS client.
+    try {
+      process.kill(serverPid, 'SIGTERM')
+    } catch {
+      // already dead
+    }
+    const deadline = Date.now() + 2000
+    while (Date.now() < deadline) {
+      try {
+        process.kill(serverPid, 0)
+        await new Promise((r) => setTimeout(r, 20))
+      } catch {
+        break
+      }
+    }
+    try {
+      process.kill(serverPid, 'SIGKILL')
+    } catch {
+      // already dead
+    }
+    // Brief pause for TCP to fully close
+    await new Promise((r) => setTimeout(r, 50))
+
+    if (daemonPid) {
+      try {
+        process.kill(daemonPid)
+      } catch {
+        // already dead
+      }
+    }
+    unlinkSync(pidFile)
+  }
+
+  // Server is dead — umount on a dead NFS mount returns instantly
+  spawnSync('umount', [mp], { stdio: ['pipe', 'pipe', 'pipe'] })
+}
+
+function unmountLinux(mp: string) {
+  const pidFile = join(homedir(), '.crm', `mount-${slugify(mp)}.pid`)
+  if (existsSync(pidFile)) {
+    const pids = readFileSync(pidFile, 'utf-8').trim().split('\n')
+    for (const pid of pids) {
+      try {
+        process.kill(Number(pid))
+      } catch {
+        // already dead
+      }
+    }
+    unlinkSync(pidFile)
+  }
+  const result = spawnSync('fusermount', ['-u', mp], {
+    stdio: ['pipe', 'pipe', 'pipe'],
+  })
+  if (result.status !== 0) {
+    spawnSync('umount', [mp], { stdio: ['pipe', 'pipe', 'pipe'] })
+  }
+}
+
+// ── CLI registration ──
 
 export function registerFuseCommands(program: Command) {
   program
     .command('mount')
-    .description('Mount CRM as virtual filesystem (requires FUSE)')
+    .description('Mount CRM as virtual filesystem')
     .argument('[mountpoint]', 'Mount point directory')
     .option('--readonly', 'Mount read-only')
     .action(async (mountpoint, opts) => {
@@ -61,133 +376,11 @@ export function registerFuseCommands(program: Command) {
         mkdirSync(mp, { recursive: true })
       }
 
-      // Check if FUSE helper binary exists
-      const helperPath = join(homedir(), '.crm', 'bin', 'crm-fuse')
-
-      // On macOS, force recompile if the binary is missing LC_RPATH (common after
-      // installing FUSE-T without pkg-config in PATH — the old binary links via
-      // @rpath but has no rpath entry, so dyld can't find the dylib).
-      if (process.platform === 'darwin' && existsSync(helperPath)) {
-        const check = spawnSync('otool', ['-l', helperPath], {
-          stdio: ['pipe', 'pipe', 'pipe'],
-        })
-        if (!check.stdout?.toString().includes('LC_RPATH')) {
-          unlinkSync(helperPath)
-        }
+      if (process.platform === 'darwin') {
+        await mountDarwin(mp, config, opts)
+      } else {
+        await mountLinux(mp, config, opts)
       }
-
-      if (!existsSync(helperPath)) {
-        // Try to compile it
-        const srcPath = join(import.meta.dir, '..', 'fuse-helper.c')
-        if (!existsSync(srcPath)) {
-          die(
-            'Error: FUSE helper not found. Install FUSE dependencies and rebuild, or use `crm export-fs` instead.',
-          )
-        }
-        ensureDir(join(homedir(), '.crm', 'bin'))
-        const fuseFlags = (() => {
-          // Try pkg-config fuse3 first (Linux, and macOS if pkg-config is in PATH)
-          const pc3 = spawnSync('pkg-config', ['--cflags', '--libs', 'fuse3'])
-          if (pc3.status === 0 && pc3.stdout) {
-            return pc3.stdout.toString().trim().split(/\s+/)
-          }
-          if (process.platform === 'darwin') {
-            // FUSE-T: try pkg-config with explicit PKG_CONFIG_PATH, then parse .pc directly
-            for (const dir of [
-              '/usr/local/lib/pkgconfig',
-              '/opt/homebrew/lib/pkgconfig',
-            ]) {
-              const pc = spawnSync(
-                'pkg-config',
-                ['--cflags', '--libs', 'fuse3'],
-                { env: { ...process.env, PKG_CONFIG_PATH: dir } },
-              )
-              if (pc.status === 0 && pc.stdout) {
-                return pc.stdout.toString().trim().split(/\s+/)
-              }
-              // pkg-config not in PATH — parse .pc file directly (preserves -Wl,-rpath,...)
-              const flags = parsePcFlags(join(dir, 'fuse3.pc'))
-              if (flags) {
-                return flags
-              }
-            }
-            die('Error: FUSE-T not found. Install with: brew install fuse-t')
-          }
-          return ['-lfuse3', '-lpthread']
-        })()
-        const compile = spawnSync(
-          'gcc',
-          ['-o', helperPath, srcPath, ...fuseFlags],
-          { stdio: ['pipe', 'pipe', 'pipe'] },
-        )
-        if (compile.status !== 0) {
-          const hint =
-            process.platform === 'darwin'
-              ? 'Install FUSE-T: brew install fuse-t'
-              : 'Install libfuse3-dev (apt) or fuse3-devel (yum).'
-          die(
-            `Error: Failed to compile FUSE helper. ${hint}\n${compile.stderr?.toString() || ''}`,
-          )
-        }
-      }
-
-      // Start the TS FUSE daemon (detached so the CLI can exit)
-      const socketPath = join(homedir(), '.crm', `fuse-${slugify(mp)}.sock`)
-      const daemonPath = join(import.meta.dir, '..', 'fuse-daemon.ts')
-
-      const daemonProc = spawn(
-        'bun',
-        [
-          'run',
-          daemonPath,
-          socketPath,
-          config.database.path,
-          ...config.pipeline.stages,
-        ],
-        { stdio: 'ignore', detached: true },
-      )
-      daemonProc.unref()
-
-      // Wait for daemon socket
-      const deadline = Date.now() + 5000
-      while (Date.now() < deadline) {
-        if (existsSync(socketPath)) {
-          break
-        }
-        await new Promise((resolve) => setTimeout(resolve, 50))
-      }
-      if (!existsSync(socketPath)) {
-        daemonProc.kill()
-        die('Error: FUSE daemon failed to start.')
-      }
-
-      // Spawn the FUSE helper (detached so the CLI can exit)
-      const fuseArgs = ['-f', mp, '--', socketPath]
-      if (opts.readonly || config.mount.readonly) {
-        fuseArgs.unshift('-o', 'ro')
-      }
-
-      const fuseProc = spawn(helperPath, fuseArgs, {
-        stdio: 'ignore',
-        detached: true,
-      })
-      // Don't unref yet — need to detect early crash before daemonizing
-
-      // Wait briefly for mount to succeed
-      await new Promise((resolve) => setTimeout(resolve, 500))
-
-      if (fuseProc.exitCode !== null) {
-        daemonProc.kill()
-        die('Error: FUSE mount failed. Is FUSE available?')
-      }
-
-      fuseProc.unref()
-
-      // Write PID file for unmount
-      const pidFile = join(homedir(), '.crm', `mount-${slugify(mp)}.pid`)
-      writeFileSync(pidFile, `${fuseProc.pid}\n${daemonProc.pid}`)
-
-      console.log(`Mounted at ${mp} (PID ${fuseProc.pid})`)
     })
 
   program
@@ -198,79 +391,10 @@ export function registerFuseCommands(program: Command) {
       const { config } = await getCtx()
       const mp = mountpoint || config.mount.default_path
 
-      const pidFile = join(homedir(), '.crm', `mount-${slugify(mp)}.pid`)
-
       if (process.platform === 'darwin') {
-        // FUSE-T uses a local NFS v4 server.  We must kill the FUSE helper
-        // (the NFS server) and wait for it to fully exit BEFORE calling umount.
-        //
-        // Why: umount on a live NFS server hangs (server alive but slow);
-        // umount -f while the server is alive panics the macOS 26 NFS client.
-        // Once the server process is dead the TCP connection drops, the kernel
-        // NFS client marks the mount stale, and plain umount returns immediately.
-        if (existsSync(pidFile)) {
-          const lines = readFileSync(pidFile, 'utf-8').trim().split('\n')
-          const fuseHelperPid = Number(lines[0])
-          const daemonPid = lines[1] ? Number(lines[1]) : null
-
-          // Terminate FUSE helper and wait up to 3 s for it to exit
-          try {
-            process.kill(fuseHelperPid, 'SIGTERM')
-          } catch {
-            // already dead
-          }
-          const deadline = Date.now() + 3000
-          while (Date.now() < deadline) {
-            try {
-              process.kill(fuseHelperPid, 0) // throws if process is gone
-              await new Promise((r) => setTimeout(r, 50))
-            } catch {
-              break // process exited
-            }
-          }
-          // Force-kill if still alive after grace period
-          try {
-            process.kill(fuseHelperPid, 'SIGKILL')
-          } catch {
-            // already dead
-          }
-
-          if (daemonPid) {
-            try {
-              process.kill(daemonPid)
-            } catch {
-              // already dead
-            }
-          }
-          unlinkSync(pidFile)
-        }
-
-        // NFS server is now dead — plain umount returns immediately
-        spawnSync('umount', [mp], { stdio: ['pipe', 'pipe', 'pipe'] })
-
-        // Brief settle time — the kernel may still be tearing down NFS client
-        // state after umount returns.  Without this, a subsequent mount can
-        // race with the in-flight cleanup and panic the NFS subsystem.
-        await new Promise((r) => setTimeout(r, 200))
+        await unmountDarwin(mp)
       } else {
-        // Linux: kill processes then fusermount/umount
-        if (existsSync(pidFile)) {
-          const pids = readFileSync(pidFile, 'utf-8').trim().split('\n')
-          for (const pid of pids) {
-            try {
-              process.kill(Number(pid))
-            } catch {
-              // already dead
-            }
-          }
-          unlinkSync(pidFile)
-        }
-        const result = spawnSync('fusermount', ['-u', mp], {
-          stdio: ['pipe', 'pipe', 'pipe'],
-        })
-        if (result.status !== 0) {
-          spawnSync('umount', [mp], { stdio: ['pipe', 'pipe', 'pipe'] })
-        }
+        await unmountLinux(mp)
       }
 
       console.log(`Unmounted ${mp}`)

@@ -193,8 +193,8 @@ async function handleRequest(
 
 // ── getattr ──
 
-// Wrapper that computes the actual file size via handleRead so macOS FUSE-T
-// (NFS-backed) doesn't zero-pad reads to the placeholder st_size.
+// Computes actual file size via handleRead — without this, FUSE reports
+// st_size=65536 and the NFS/FUSE client zero-pads reads to that size.
 async function handleGetattr(
   db: DB,
   config: CRMConfig,

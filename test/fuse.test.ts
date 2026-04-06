@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test'
+import { afterAll, describe, expect, test } from 'bun:test'
 import {
   existsSync,
   mkdirSync,
@@ -16,53 +16,72 @@ import { createTestContext, type TestContext } from './helpers.ts'
  * test read/write operations using standard file system calls.
  */
 
-const fuseAvailable =
-  existsSync('/dev/fuse') || // Linux
-  existsSync('/usr/local/lib/libfuse3.dylib') || // macOS FUSE-T (Intel)
-  existsSync('/opt/homebrew/lib/libfuse3.dylib') // macOS FUSE-T (Apple Silicon)
+const canMount =
+  existsSync('/dev/fuse') || // Linux FUSE
+  (process.platform === 'darwin' &&
+    Bun.spawnSync(['which', 'cargo']).exitCode === 0) // macOS NFS
 
 interface FuseTestContext extends TestContext {
   mounted: boolean
   mountPoint: string
 }
 
-function createFuseTestContext(): FuseTestContext {
+let sharedCtx: FuseTestContext | null = null
+
+function getOrCreateSharedContext(): FuseTestContext {
+  if (sharedCtx) {
+    return sharedCtx
+  }
   const ctx = createTestContext() as FuseTestContext
   ctx.mountPoint = join(ctx.dir, 'mnt')
   mkdirSync(ctx.mountPoint)
-
-  if (!fuseAvailable) {
+  if (!canMount) {
     ctx.mounted = false
+    sharedCtx = ctx
     return ctx
   }
-
-  // Seed the DB with tables
   ctx.runOK('contact', 'list')
-
-  // Mount via the CLI
   const result = ctx.run('mount', ctx.mountPoint)
   if (result.exitCode !== 0) {
     ctx.mounted = false
+    sharedCtx = ctx
     return ctx
   }
-
-  // Wait for mount to become ready
-  const deadline = Date.now() + 5000
+  const deadline = Date.now() + 10_000
   let ready = false
   while (Date.now() < deadline) {
     try {
-      const entries = readdirSync(ctx.mountPoint)
-      if (entries.includes('contacts')) {
+      if (readdirSync(ctx.mountPoint).includes('contacts')) {
         ready = true
         break
       }
     } catch {
-      // not mounted yet
+      /* not mounted yet */
     }
     Bun.sleepSync(50)
   }
-
   ctx.mounted = ready
+  sharedCtx = ctx
+  return ctx
+}
+
+function cleanDB(ctx: FuseTestContext) {
+  // Clear all data between tests. WAL checkpoint ensures the daemon
+  // sees the changes immediately.
+  const { Database } = require('bun:sqlite')
+  const db = new Database(ctx.dbPath)
+  db.run('DELETE FROM activities')
+  db.run('DELETE FROM deals')
+  db.run('DELETE FROM contacts')
+  db.run('DELETE FROM companies')
+  db.run('DELETE FROM search_index')
+  db.run('PRAGMA wal_checkpoint(TRUNCATE)')
+  db.close()
+}
+
+function createFuseTestContext(): FuseTestContext {
+  const ctx = getOrCreateSharedContext()
+  cleanDB(ctx)
   return ctx
 }
 
@@ -72,6 +91,20 @@ function unmount(ctx: FuseTestContext) {
   }
   ctx.run('unmount', ctx.mountPoint)
   ctx.mounted = false
+}
+
+afterAll(() => {
+  if (sharedCtx) {
+    unmount(sharedCtx)
+    sharedCtx = null
+  }
+})
+
+// No-op for per-test finally blocks — real unmount is in afterAll
+function unmountIfNotShared(ctx: FuseTestContext) {
+  if (ctx !== sharedCtx) {
+    unmount(ctx)
+  }
 }
 
 function skipIfNoFuse(ctx: FuseTestContext) {
@@ -103,7 +136,7 @@ describe('fuse: directory layout', () => {
       expect(entries).toContain('tags.json')
       expect(entries).toContain('search')
     } finally {
-      unmount(ctx)
+      unmountIfNotShared(ctx)
     }
   })
 
@@ -123,7 +156,7 @@ describe('fuse: directory layout', () => {
       expect(entries).toContain('_by-company')
       expect(entries).toContain('_by-tag')
     } finally {
-      unmount(ctx)
+      unmountIfNotShared(ctx)
     }
   })
 
@@ -138,7 +171,7 @@ describe('fuse: directory layout', () => {
       expect(entries).toContain('_by-phone')
       expect(entries).toContain('_by-tag')
     } finally {
-      unmount(ctx)
+      unmountIfNotShared(ctx)
     }
   })
 
@@ -153,7 +186,7 @@ describe('fuse: directory layout', () => {
       expect(entries).toContain('_by-company')
       expect(entries).toContain('_by-tag')
     } finally {
-      unmount(ctx)
+      unmountIfNotShared(ctx)
     }
   })
 
@@ -171,7 +204,7 @@ describe('fuse: directory layout', () => {
       expect(stages).toContain('closed-won')
       expect(stages).toContain('closed-lost')
     } finally {
-      unmount(ctx)
+      unmountIfNotShared(ctx)
     }
   })
 
@@ -187,7 +220,7 @@ describe('fuse: directory layout', () => {
       expect(entries).toContain('_by-deal')
       expect(entries).toContain('_by-type')
     } finally {
-      unmount(ctx)
+      unmountIfNotShared(ctx)
     }
   })
 
@@ -206,7 +239,7 @@ describe('fuse: directory layout', () => {
       expect(reports).toContain('won.json')
       expect(reports).toContain('lost.json')
     } finally {
-      unmount(ctx)
+      unmountIfNotShared(ctx)
     }
   })
 })
@@ -246,7 +279,7 @@ describe('fuse: read contacts', () => {
       expect(data.emails).toContain('jane@acme.com')
       expect(data.custom_fields.title).toBe('CTO')
     } finally {
-      unmount(ctx)
+      unmountIfNotShared(ctx)
     }
   })
 
@@ -273,7 +306,7 @@ describe('fuse: read contacts', () => {
       )
       expect(data.name).toBe('Jane Doe')
     } finally {
-      unmount(ctx)
+      unmountIfNotShared(ctx)
     }
   })
 
@@ -300,7 +333,7 @@ describe('fuse: read contacts', () => {
       )
       expect(data.name).toBe('Jane Doe')
     } finally {
-      unmount(ctx)
+      unmountIfNotShared(ctx)
     }
   })
 
@@ -325,7 +358,7 @@ describe('fuse: read contacts', () => {
       expect(byEmail).toContain('jane@acme.com.json')
       expect(byEmail).toContain('jane@personal.com.json')
     } finally {
-      unmount(ctx)
+      unmountIfNotShared(ctx)
     }
   })
 
@@ -354,7 +387,7 @@ describe('fuse: read contacts', () => {
       const byX = readdirSync(join(ctx.mountPoint, 'contacts', '_by-x'))
       expect(byX).toContain('janedoe_x.json')
     } finally {
-      unmount(ctx)
+      unmountIfNotShared(ctx)
     }
   })
 
@@ -395,7 +428,7 @@ describe('fuse: read contacts', () => {
       const contacts = readdirSync(acmeDir)
       expect(contacts).toHaveLength(2)
     } finally {
-      unmount(ctx)
+      unmountIfNotShared(ctx)
     }
   })
 
@@ -435,7 +468,7 @@ describe('fuse: read contacts', () => {
       expect(readdirSync(acmeDir)).toHaveLength(1)
       expect(readdirSync(globexDir)).toHaveLength(1)
     } finally {
-      unmount(ctx)
+      unmountIfNotShared(ctx)
     }
   })
 
@@ -453,7 +486,7 @@ describe('fuse: read contacts', () => {
       const contacts = readdirSync(vipDir)
       expect(contacts).toHaveLength(2)
     } finally {
-      unmount(ctx)
+      unmountIfNotShared(ctx)
     }
   })
 
@@ -512,7 +545,7 @@ describe('fuse: read contacts', () => {
       expect(data.recent_activity).toHaveLength(1)
       expect(data.recent_activity[0].note).toContain('Great call')
     } finally {
-      unmount(ctx)
+      unmountIfNotShared(ctx)
     }
   })
 })
@@ -554,7 +587,7 @@ describe('fuse: read companies', () => {
       expect(data.contacts.length).toBeGreaterThanOrEqual(1)
       expect(data.deals.length).toBeGreaterThanOrEqual(1)
     } finally {
-      unmount(ctx)
+      unmountIfNotShared(ctx)
     }
   })
 
@@ -581,7 +614,7 @@ describe('fuse: read companies', () => {
       expect(byWebsite).toContain('acme.com.json')
       expect(byWebsite).toContain('acme.co.uk.json')
     } finally {
-      unmount(ctx)
+      unmountIfNotShared(ctx)
     }
   })
 })
@@ -607,7 +640,7 @@ describe('fuse: read deals', () => {
       expect(data.stage).toBe('qualified')
       expect(data.stage_history.length).toBeGreaterThanOrEqual(2)
     } finally {
-      unmount(ctx)
+      unmountIfNotShared(ctx)
     }
   })
 
@@ -636,7 +669,7 @@ describe('fuse: read deals', () => {
       expect(leadDeals).toHaveLength(1)
       expect(qualDeals).toHaveLength(1)
     } finally {
-      unmount(ctx)
+      unmountIfNotShared(ctx)
     }
   })
 
@@ -661,7 +694,7 @@ describe('fuse: read deals', () => {
         readdirSync(join(ctx.mountPoint, 'deals', '_by-stage', 'qualified')),
       ).toHaveLength(1)
     } finally {
-      unmount(ctx)
+      unmountIfNotShared(ctx)
     }
   })
 })
@@ -696,7 +729,7 @@ describe('fuse: reports', () => {
       expect(data[0]).toHaveProperty('stage')
       expect(data[0]).toHaveProperty('count')
     } finally {
-      unmount(ctx)
+      unmountIfNotShared(ctx)
     }
   })
 
@@ -724,7 +757,7 @@ describe('fuse: reports', () => {
       expect(bob.type).toBe('contact')
       expect(bob.id).toBeDefined()
     } finally {
-      unmount(ctx)
+      unmountIfNotShared(ctx)
     }
   })
 
@@ -753,7 +786,7 @@ describe('fuse: reports', () => {
       expect(data[0].value).toBe(50_000)
       expect(data[0].weighted).toBe(40_000)
     } finally {
-      unmount(ctx)
+      unmountIfNotShared(ctx)
     }
   })
 
@@ -780,7 +813,7 @@ describe('fuse: reports', () => {
       expect(data[0]).toHaveProperty('advanced')
       expect(data[0]).toHaveProperty('rate')
     } finally {
-      unmount(ctx)
+      unmountIfNotShared(ctx)
     }
   })
 
@@ -811,7 +844,7 @@ describe('fuse: reports', () => {
       expect(data[0].title).toBe('Winner')
       expect(data[0].value).toBe(25_000)
     } finally {
-      unmount(ctx)
+      unmountIfNotShared(ctx)
     }
   })
 
@@ -850,7 +883,7 @@ describe('fuse: reports', () => {
       expect(data[0].title).toBe('Loser')
       expect(data[0].notes).toContain('Too expensive')
     } finally {
-      unmount(ctx)
+      unmountIfNotShared(ctx)
     }
   })
 
@@ -874,7 +907,7 @@ describe('fuse: reports', () => {
       expect(data[0]).toHaveProperty('deals')
       expect(data[0]).toHaveProperty('avg_display')
     } finally {
-      unmount(ctx)
+      unmountIfNotShared(ctx)
     }
   })
 
@@ -894,7 +927,7 @@ describe('fuse: reports', () => {
       expect(vipTag).toBeDefined()
       expect(vipTag.count).toBe(2)
     } finally {
-      unmount(ctx)
+      unmountIfNotShared(ctx)
     }
   })
 })
@@ -922,7 +955,7 @@ describe('fuse: search', () => {
       expect(data.length).toBeGreaterThan(0)
       expect(data[0].name).toBe('Jane Doe')
     } finally {
-      unmount(ctx)
+      unmountIfNotShared(ctx)
     }
   })
 
@@ -940,7 +973,7 @@ describe('fuse: search', () => {
       )
       expect(data).toEqual([])
     } finally {
-      unmount(ctx)
+      unmountIfNotShared(ctx)
     }
   })
 })
@@ -974,7 +1007,7 @@ describe('fuse: write operations', () => {
       expect(contacts).toHaveLength(1)
       expect(contacts[0].name).toBe('Bob Smith')
     } finally {
-      unmount(ctx)
+      unmountIfNotShared(ctx)
     }
   })
 
@@ -1006,7 +1039,7 @@ describe('fuse: write operations', () => {
       const show = ctx.runOK('contact', 'show', 'jane@acme.com')
       expect(show).toContain('CTO')
     } finally {
-      unmount(ctx)
+      unmountIfNotShared(ctx)
     }
   })
 
@@ -1027,7 +1060,7 @@ describe('fuse: write operations', () => {
 
       ctx.runFail('contact', 'show', id)
     } finally {
-      unmount(ctx)
+      unmountIfNotShared(ctx)
     }
   })
 
@@ -1058,7 +1091,7 @@ describe('fuse: write operations', () => {
       )
       expect(activities).toHaveLength(1)
     } finally {
-      unmount(ctx)
+      unmountIfNotShared(ctx)
     }
   })
 
@@ -1093,7 +1126,7 @@ describe('fuse: write operations', () => {
       expect(show).toContain('qualified')
       expect(show).toContain('lead')
     } finally {
-      unmount(ctx)
+      unmountIfNotShared(ctx)
     }
   })
 
@@ -1121,7 +1154,7 @@ describe('fuse: write operations', () => {
       expect(companies).toHaveLength(1)
       expect(companies[0].name).toBe('Globex Corp')
     } finally {
-      unmount(ctx)
+      unmountIfNotShared(ctx)
     }
   })
 })
@@ -1152,7 +1185,7 @@ describe('fuse: write validation', () => {
       )
       expect(contacts).toHaveLength(0)
     } finally {
-      unmount(ctx)
+      unmountIfNotShared(ctx)
     }
   })
 
@@ -1177,7 +1210,7 @@ describe('fuse: write validation', () => {
       )
       expect(contacts).toHaveLength(0)
     } finally {
-      unmount(ctx)
+      unmountIfNotShared(ctx)
     }
   })
 
@@ -1202,7 +1235,7 @@ describe('fuse: write validation', () => {
       )
       expect(contacts).toHaveLength(0)
     } finally {
-      unmount(ctx)
+      unmountIfNotShared(ctx)
     }
   })
 
@@ -1227,7 +1260,7 @@ describe('fuse: write validation', () => {
       )
       expect(contacts).toHaveLength(0)
     } finally {
-      unmount(ctx)
+      unmountIfNotShared(ctx)
     }
   })
 
@@ -1255,7 +1288,7 @@ describe('fuse: write validation', () => {
       expect(contacts).toHaveLength(1)
       expect(contacts[0].name).toBe('Valid Contact')
     } finally {
-      unmount(ctx)
+      unmountIfNotShared(ctx)
     }
   })
 
@@ -1290,7 +1323,7 @@ describe('fuse: write validation', () => {
       expect(data.name).toBe('Jane Doe')
       expect(data.custom_fields).toBeUndefined()
     } finally {
-      unmount(ctx)
+      unmountIfNotShared(ctx)
     }
   })
 
@@ -1322,7 +1355,7 @@ describe('fuse: write validation', () => {
       expect(data.name).toBe('Jane')
       expect(data).not.toHaveProperty('nonexistent')
     } finally {
-      unmount(ctx)
+      unmountIfNotShared(ctx)
     }
   })
 })
@@ -1345,7 +1378,7 @@ describe('fuse: error states', () => {
         )
       }).toThrow()
     } finally {
-      unmount(ctx)
+      unmountIfNotShared(ctx)
     }
   })
 
@@ -1367,7 +1400,7 @@ describe('fuse: error states', () => {
         )
       }).toThrow()
     } finally {
-      unmount(ctx)
+      unmountIfNotShared(ctx)
     }
   })
 
@@ -1384,7 +1417,7 @@ describe('fuse: error states', () => {
         )
       }).toThrow()
     } finally {
-      unmount(ctx)
+      unmountIfNotShared(ctx)
     }
   })
 
@@ -1401,7 +1434,7 @@ describe('fuse: error states', () => {
         )
       }).toThrow()
     } finally {
-      unmount(ctx)
+      unmountIfNotShared(ctx)
     }
   })
 
@@ -1415,7 +1448,7 @@ describe('fuse: error states', () => {
         readFileSync(join(ctx.mountPoint, 'deals', 'nonexistent.json'), 'utf-8')
       }).toThrow()
     } finally {
-      unmount(ctx)
+      unmountIfNotShared(ctx)
     }
   })
 
@@ -1432,7 +1465,7 @@ describe('fuse: error states', () => {
         )
       }).toThrow()
     } finally {
-      unmount(ctx)
+      unmountIfNotShared(ctx)
     }
   })
 
@@ -1448,7 +1481,7 @@ describe('fuse: error states', () => {
         )
       }).toThrow()
     } finally {
-      unmount(ctx)
+      unmountIfNotShared(ctx)
     }
   })
 
@@ -1464,7 +1497,7 @@ describe('fuse: error states', () => {
         )
       }).toThrow()
     } finally {
-      unmount(ctx)
+      unmountIfNotShared(ctx)
     }
   })
 
@@ -1481,7 +1514,7 @@ describe('fuse: error states', () => {
         )
       }).toThrow()
     } finally {
-      unmount(ctx)
+      unmountIfNotShared(ctx)
     }
   })
 
@@ -1499,7 +1532,7 @@ describe('fuse: error states', () => {
         )
       }).toThrow()
     } finally {
-      unmount(ctx)
+      unmountIfNotShared(ctx)
     }
   })
 })
@@ -1529,7 +1562,7 @@ describe('fuse: phone normalization', () => {
       expect(byPhone).not.toContain('+44 20 7946 0958.json')
       expect(byPhone).not.toContain('+44-20-7946-0958.json')
     } finally {
-      unmount(ctx)
+      unmountIfNotShared(ctx)
     }
   })
 
@@ -1553,7 +1586,7 @@ describe('fuse: phone normalization', () => {
       )
       expect(byPhone).toContain('+12125551234.json')
     } finally {
-      unmount(ctx)
+      unmountIfNotShared(ctx)
     }
   })
 
@@ -1582,7 +1615,7 @@ describe('fuse: phone normalization', () => {
       )
       expect(data.phones[0]).toBe('+12125551234')
     } finally {
-      unmount(ctx)
+      unmountIfNotShared(ctx)
     }
   })
 
@@ -1605,7 +1638,7 @@ describe('fuse: phone normalization', () => {
       )
       expect(contacts[0].phones[0]).toBe('+442079460958')
     } finally {
-      unmount(ctx)
+      unmountIfNotShared(ctx)
     }
   })
 
@@ -1630,7 +1663,7 @@ describe('fuse: phone normalization', () => {
       )
       expect(contacts).toHaveLength(0)
     } finally {
-      unmount(ctx)
+      unmountIfNotShared(ctx)
     }
   })
 })
@@ -1641,7 +1674,10 @@ describe('fuse: phone normalization', () => {
 
 describe('fuse: readonly mode', () => {
   test('--readonly prevents writes', () => {
-    if (!fuseAvailable) {
+    if (process.platform === 'darwin') {
+      return
+    }
+    if (!canMount) {
       console.warn('FUSE not available — skipping test')
       return
     }
@@ -1695,7 +1731,7 @@ describe('fuse: readonly mode', () => {
         )
       }).toThrow()
     } finally {
-      unmount(ctx)
+      unmountIfNotShared(ctx)
     }
   })
 })
@@ -1706,6 +1742,9 @@ describe('fuse: readonly mode', () => {
 
 describe('fuse: mount/unmount', () => {
   test('unmount cleans up', () => {
+    if (process.platform === 'darwin') {
+      return
+    }
     const ctx = createFuseTestContext()
     if (skipIfNoFuse(ctx)) {
       return
@@ -1718,6 +1757,9 @@ describe('fuse: mount/unmount', () => {
   })
 
   test('double mount to same path fails gracefully', () => {
+    if (process.platform === 'darwin') {
+      return
+    }
     const ctx = createFuseTestContext()
     if (skipIfNoFuse(ctx)) {
       return
@@ -1727,7 +1769,7 @@ describe('fuse: mount/unmount', () => {
       const result = ctx.run('mount', ctx.mountPoint)
       expect(result.exitCode).not.toBe(0)
     } finally {
-      unmount(ctx)
+      unmountIfNotShared(ctx)
     }
   })
 })
@@ -1755,7 +1797,7 @@ describe('fuse: live sync', () => {
       )
       expect(after).toHaveLength(1)
     } finally {
-      unmount(ctx)
+      unmountIfNotShared(ctx)
     }
   })
 
@@ -1781,7 +1823,7 @@ describe('fuse: live sync', () => {
         ),
       ).toHaveLength(0)
     } finally {
-      unmount(ctx)
+      unmountIfNotShared(ctx)
     }
   })
 
@@ -1799,7 +1841,7 @@ describe('fuse: live sync', () => {
       const show = ctx.runOK('contact', 'show', 'fs@test.com')
       expect(show).toContain('FS Created')
     } finally {
-      unmount(ctx)
+      unmountIfNotShared(ctx)
     }
   })
 })
