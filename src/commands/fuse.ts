@@ -43,8 +43,14 @@ function getDaemonArgs(): string[] {
   if (!script) {
     return []
   }
-  // Resolve symlinks (npm global bin creates "crm" → "dist/cli.js" symlinks)
-  const resolved = realpathSync(script)
+  // Resolve symlinks (npm global bin creates "crm" → "dist/cli.js" symlinks).
+  // realpathSync throws for compiled binaries (bun uses virtual /$bunfs/ paths).
+  let resolved: string
+  try {
+    resolved = realpathSync(script)
+  } catch {
+    return []
+  }
   if (/\.[tj]s$/.test(resolved)) {
     return [resolved]
   }
