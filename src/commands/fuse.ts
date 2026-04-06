@@ -21,6 +21,32 @@ function ensureDir(dir: string): void {
   }
 }
 
+// Parse a .pc file and return [cflags..., libs...] without needing pkg-config.
+function parsePcFlags(pcFile: string): string[] | null {
+  if (!existsSync(pcFile)) {
+    return null
+  }
+  const content = readFileSync(pcFile, 'utf-8')
+  const vars: Record<string, string> = {}
+  for (const line of content.split('\n')) {
+    const m = line.match(/^(\w+)=(.*)$/)
+    if (m) {
+      vars[m[1]] = m[2]
+    }
+  }
+  const expand = (s: string): string =>
+    s.replace(/\$\{(\w+)\}/g, (_, k) => expand(vars[k] ?? ''))
+  const libs = content.match(/^Libs:\s*(.+)$/m)?.[1]
+  const cflags = content.match(/^Cflags:\s*(.+)$/m)?.[1]
+  if (!(libs && cflags)) {
+    return null
+  }
+  return [
+    ...expand(cflags).trim().split(/\s+/),
+    ...expand(libs).trim().split(/\s+/),
+  ].filter(Boolean)
+}
+
 export function registerFuseCommands(program: Command) {
   program
     .command('mount')
@@ -38,6 +64,18 @@ export function registerFuseCommands(program: Command) {
       // Check if FUSE helper binary exists
       const helperPath = join(homedir(), '.crm', 'bin', 'crm-fuse')
 
+      // On macOS, force recompile if the binary is missing LC_RPATH (common after
+      // installing FUSE-T without pkg-config in PATH — the old binary links via
+      // @rpath but has no rpath entry, so dyld can't find the dylib).
+      if (process.platform === 'darwin' && existsSync(helperPath)) {
+        const check = spawnSync('otool', ['-l', helperPath], {
+          stdio: ['pipe', 'pipe', 'pipe'],
+        })
+        if (!check.stdout?.toString().includes('LC_RPATH')) {
+          unlinkSync(helperPath)
+        }
+      }
+
       if (!existsSync(helperPath)) {
         // Try to compile it
         const srcPath = join(import.meta.dir, '..', 'fuse-helper.c')
@@ -48,48 +86,32 @@ export function registerFuseCommands(program: Command) {
         }
         ensureDir(join(homedir(), '.crm', 'bin'))
         const fuseFlags = (() => {
-          // Try pkg-config fuse3 first (Linux, FUSE-T on macOS)
+          // Try pkg-config fuse3 first (Linux, and macOS if pkg-config is in PATH)
           const pc3 = spawnSync('pkg-config', ['--cflags', '--libs', 'fuse3'])
           if (pc3.status === 0 && pc3.stdout) {
             return pc3.stdout.toString().trim().split(/\s+/)
           }
-          // macOS: try FUSE-T paths
           if (process.platform === 'darwin') {
-            const fuseTPaths = [
+            // FUSE-T: try pkg-config with explicit PKG_CONFIG_PATH, then parse .pc directly
+            for (const dir of [
               '/usr/local/lib/pkgconfig',
               '/opt/homebrew/lib/pkgconfig',
-            ]
-            for (const dir of fuseTPaths) {
+            ]) {
               const pc = spawnSync(
                 'pkg-config',
                 ['--cflags', '--libs', 'fuse3'],
-                {
-                  env: { ...process.env, PKG_CONFIG_PATH: dir },
-                },
+                { env: { ...process.env, PKG_CONFIG_PATH: dir } },
               )
               if (pc.status === 0 && pc.stdout) {
                 return pc.stdout.toString().trim().split(/\s+/)
               }
-            }
-            // macFUSE fallback (FUSE 2 API, but macFUSE includes a fuse3-compat header)
-            const macfusePaths = [
-              '/usr/local/include/fuse',
-              '/opt/homebrew/include/fuse',
-              '/usr/local/include/osxfuse/fuse',
-            ]
-            for (const inc of macfusePaths) {
-              if (existsSync(join(inc, 'fuse.h'))) {
-                return [
-                  `-I${inc}/..`,
-                  '-L/usr/local/lib',
-                  '-lfuse',
-                  '-lpthread',
-                ]
+              // pkg-config not in PATH — parse .pc file directly (preserves -Wl,-rpath,...)
+              const flags = parsePcFlags(join(dir, 'fuse3.pc'))
+              if (flags) {
+                return flags
               }
             }
-            die(
-              'Error: FUSE not found on macOS. Install FUSE-T (`brew install fuse-t`) or macFUSE (`brew install macfuse`).',
-            )
+            die('Error: FUSE-T not found. Install with: brew install fuse-t')
           }
           return ['-lfuse3', '-lpthread']
         })()
@@ -101,7 +123,7 @@ export function registerFuseCommands(program: Command) {
         if (compile.status !== 0) {
           const hint =
             process.platform === 'darwin'
-              ? 'Install FUSE-T (`brew install fuse-t`) or macFUSE (`brew install macfuse`).'
+              ? 'Install FUSE-T: brew install fuse-t'
               : 'Install libfuse3-dev (apt) or fuse3-devel (yum).'
           die(
             `Error: Failed to compile FUSE helper. ${hint}\n${compile.stderr?.toString() || ''}`,
@@ -149,7 +171,7 @@ export function registerFuseCommands(program: Command) {
         stdio: 'ignore',
         detached: true,
       })
-      fuseProc.unref()
+      // Don't unref yet — need to detect early crash before daemonizing
 
       // Wait briefly for mount to succeed
       await new Promise((resolve) => setTimeout(resolve, 500))
@@ -158,6 +180,8 @@ export function registerFuseCommands(program: Command) {
         daemonProc.kill()
         die('Error: FUSE mount failed. Is FUSE available?')
       }
+
+      fuseProc.unref()
 
       // Write PID file for unmount
       const pidFile = join(homedir(), '.crm', `mount-${slugify(mp)}.pid`)
@@ -169,27 +193,13 @@ export function registerFuseCommands(program: Command) {
   program
     .command('unmount')
     .description('Unmount CRM filesystem')
-    .argument('<mountpoint>', 'Mount point')
-    .action((mountpoint: string) => {
-      const result = spawnSync('fusermount', ['-u', mountpoint], {
-        stdio: ['pipe', 'pipe', 'pipe'],
-      })
-      if (result.status !== 0) {
-        // Try umount as fallback
-        const umount = spawnSync('umount', [mountpoint], {
-          stdio: ['pipe', 'pipe', 'pipe'],
-        })
-        if (umount.status !== 0) {
-          die(`Error: Failed to unmount ${mountpoint}`)
-        }
-      }
+    .argument('[mountpoint]', 'Mount point')
+    .action(async (mountpoint?: string) => {
+      const { config } = await getCtx()
+      const mp = mountpoint || config.mount.default_path
 
-      // Kill daemon process if PID file exists
-      const pidFile = join(
-        homedir(),
-        '.crm',
-        `mount-${slugify(mountpoint)}.pid`,
-      )
+      // Kill FUSE helper and daemon processes first (even if already unmounted)
+      const pidFile = join(homedir(), '.crm', `mount-${slugify(mp)}.pid`)
       if (existsSync(pidFile)) {
         const pids = readFileSync(pidFile, 'utf-8').trim().split('\n')
         for (const pid of pids) {
@@ -201,6 +211,20 @@ export function registerFuseCommands(program: Command) {
         }
         unlinkSync(pidFile)
       }
+
+      // Unmount — on macOS use umount directly (fusermount is Linux-only)
+      if (process.platform === 'darwin') {
+        spawnSync('umount', [mp], { stdio: ['pipe', 'pipe', 'pipe'] })
+      } else {
+        const result = spawnSync('fusermount', ['-u', mp], {
+          stdio: ['pipe', 'pipe', 'pipe'],
+        })
+        if (result.status !== 0) {
+          spawnSync('umount', [mp], { stdio: ['pipe', 'pipe', 'pipe'] })
+        }
+      }
+
+      console.log(`Unmounted ${mp}`)
     })
 
   program

@@ -16,7 +16,10 @@ import { createTestContext, type TestContext } from './helpers.ts'
  * test read/write operations using standard file system calls.
  */
 
-const fuseAvailable = existsSync('/dev/fuse')
+const fuseAvailable =
+  existsSync('/dev/fuse') || // Linux
+  existsSync('/usr/local/lib/libfuse3.dylib') || // macOS FUSE-T (Intel)
+  existsSync('/opt/homebrew/lib/libfuse3.dylib') // macOS FUSE-T (Apple Silicon)
 
 interface FuseTestContext extends TestContext {
   mounted: boolean
