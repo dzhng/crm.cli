@@ -1,14 +1,13 @@
 import { afterAll, describe, expect, test } from 'bun:test'
 import { execSync, spawnSync } from 'node:child_process'
 import {
-  existsSync,
   mkdirSync,
   readdirSync,
   readFileSync,
   unlinkSync,
   writeFileSync,
 } from 'node:fs'
-import { homedir } from 'node:os'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 import { canMount, createTestContext, type TestContext } from './helpers.ts'
@@ -25,39 +24,36 @@ function writeFile(path: string, content: string) {
 // the detached crm-fuse/fuse-daemon processes survive. Without this cleanup,
 // they accumulate across runs and exhaust kernel FUSE connections.
 if (canMount && process.platform === 'linux') {
-  const crmDir = join(homedir(), '.crm')
-  if (existsSync(crmDir)) {
-    const pidFiles = readdirSync(crmDir).filter(
-      (f) => f.startsWith('mount-tmp-crm-test-') && f.endsWith('.pid'),
-    )
-    for (const f of pidFiles) {
-      const pidPath = join(crmDir, f)
-      try {
-        const pids = readFileSync(pidPath, 'utf-8').trim().split('\n')
-        for (const pid of pids) {
-          try {
-            process.kill(Number(pid))
-          } catch {
-            // already dead
-          }
+  const pidFiles = readdirSync(tmpdir()).filter(
+    (f) => f.startsWith('crm-mount-') && f.endsWith('.pid'),
+  )
+  for (const f of pidFiles) {
+    const pidPath = join(tmpdir(), f)
+    try {
+      const pids = readFileSync(pidPath, 'utf-8').trim().split('\n')
+      for (const pid of pids) {
+        try {
+          process.kill(Number(pid))
+        } catch {
+          // already dead
         }
-        unlinkSync(pidPath)
-      } catch {
-        // ignore
       }
+      unlinkSync(pidPath)
+    } catch {
+      // ignore
     }
-    // Also clean up any stale test FUSE mounts still in the kernel
-    const mounts = spawnSync('bash', [
-      '-c',
-      "mount | grep 'fuse\\.crm-fuse' | grep '/tmp/crm-test-' | awk '{print $3}'",
-    ])
-    if (mounts.stdout) {
-      for (const mp of mounts.stdout.toString().trim().split('\n')) {
-        if (mp) {
-          spawnSync('fusermount', ['-u', mp], {
-            stdio: ['pipe', 'pipe', 'pipe'],
-          })
-        }
+  }
+  // Also clean up any stale test FUSE mounts still in the kernel
+  const mounts = spawnSync('bash', [
+    '-c',
+    "mount | grep 'fuse\\.crm-fuse' | grep '/tmp/crm-test-' | awk '{print $3}'",
+  ])
+  if (mounts.stdout) {
+    for (const mp of mounts.stdout.toString().trim().split('\n')) {
+      if (mp) {
+        spawnSync('fusermount', ['-u', mp], {
+          stdio: ['pipe', 'pipe', 'pipe'],
+        })
       }
     }
   }

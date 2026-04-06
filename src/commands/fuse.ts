@@ -6,7 +6,7 @@ import {
   unlinkSync,
   writeFileSync,
 } from 'node:fs'
-import { homedir } from 'node:os'
+import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 import type { Command } from 'commander'
@@ -71,7 +71,7 @@ async function mountDarwin(
   }
 
   // Start the TS daemon (same as before — handles all business logic)
-  const socketPath = join(homedir(), '.crm', `fuse-${slugify(mp)}.sock`)
+  const socketPath = join(tmpdir(), `crm-fuse-${slugify(mp)}.sock`)
   const daemonPath = join(import.meta.dir, '..', 'fuse-daemon.ts')
 
   const daemonProc = spawn(
@@ -189,7 +189,7 @@ async function mountDarwin(
   }
 
   // Write PID file (same format: line 1 = server PID, line 2 = daemon PID)
-  const pidFile = join(homedir(), '.crm', `mount-${slugify(mp)}.pid`)
+  const pidFile = join(tmpdir(), `crm-mount-${slugify(mp)}.pid`)
   writeFileSync(pidFile, `${nfsProc.pid}\n${daemonProc.pid}`)
 
   console.log(`Mounted at ${mp} (NFS port ${port}, PID ${nfsProc.pid})`)
@@ -236,7 +236,7 @@ async function mountLinux(
   }
 
   // Start the TS daemon
-  const socketPath = join(homedir(), '.crm', `fuse-${slugify(mp)}.sock`)
+  const socketPath = join(tmpdir(), `crm-fuse-${slugify(mp)}.sock`)
   const daemonPath = join(import.meta.dir, '..', 'fuse-daemon.ts')
 
   const daemonProc = spawn(
@@ -285,7 +285,7 @@ async function mountLinux(
 
   fuseProc.unref()
 
-  const pidFile = join(homedir(), '.crm', `mount-${slugify(mp)}.pid`)
+  const pidFile = join(tmpdir(), `crm-mount-${slugify(mp)}.pid`)
   writeFileSync(pidFile, `${fuseProc.pid}\n${daemonProc.pid}`)
 
   console.log(`Mounted at ${mp} (PID ${fuseProc.pid})`)
@@ -294,7 +294,7 @@ async function mountLinux(
 // ── Unmount ──
 
 async function unmountDarwin(mp: string) {
-  const pidFile = join(homedir(), '.crm', `mount-${slugify(mp)}.pid`)
+  const pidFile = join(tmpdir(), `crm-mount-${slugify(mp)}.pid`)
 
   if (existsSync(pidFile)) {
     const lines = readFileSync(pidFile, 'utf-8').trim().split('\n')
@@ -351,7 +351,7 @@ function unmountLinux(mp: string) {
     spawnSync('umount', [mp], { stdio: ['pipe', 'pipe', 'pipe'] })
   }
 
-  const pidFile = join(homedir(), '.crm', `mount-${slugify(mp)}.pid`)
+  const pidFile = join(tmpdir(), `crm-mount-${slugify(mp)}.pid`)
   if (existsSync(pidFile)) {
     const pids = readFileSync(pidFile, 'utf-8').trim().split('\n')
     for (const pid of pids) {
@@ -365,7 +365,7 @@ function unmountLinux(mp: string) {
   }
 
   // Clean up the daemon socket (not removed by kill alone)
-  const socketPath = join(homedir(), '.crm', `fuse-${slugify(mp)}.sock`)
+  const socketPath = join(tmpdir(), `crm-fuse-${slugify(mp)}.sock`)
   try {
     unlinkSync(socketPath)
   } catch {
