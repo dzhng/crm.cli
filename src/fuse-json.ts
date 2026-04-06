@@ -61,10 +61,10 @@ To update, write to the existing filename. Fields you omit are left unchanged.
 
 ## Search
 
-Write a query to search/query.txt and read search/results.json:
+Read a file in search/ where the filename is your query:
 
-  echo "fintech CTO London" > search/query.txt
-  cat search/results.json
+  cat search/jane.json           → contacts/companies/deals matching "jane"
+  cat search/fintech-cto.json    → results matching "fintech-cto"
 
 ## Phones
 
