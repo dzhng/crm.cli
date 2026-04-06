@@ -413,6 +413,27 @@ export function registerFuseCommands(program: Command) {
       const { config } = await getCtx()
       const mp = mountpoint || config.mount.default_path
 
+      // Check if already mounted
+      const pidFile = join(tmpdir(), `crm-mount-${slugify(mp)}.pid`)
+      if (existsSync(pidFile)) {
+        const pids = readFileSync(pidFile, 'utf-8').trim().split('\n')
+        const alive = pids.some((pid) => {
+          try {
+            process.kill(Number(pid), 0)
+            return true
+          } catch {
+            return false
+          }
+        })
+        if (alive) {
+          die(
+            `Error: ${mp} is already mounted. Run \`crm unmount ${mp}\` first.`,
+          )
+        }
+        // Stale PID file — clean up
+        unlinkSync(pidFile)
+      }
+
       if (!existsSync(mp)) {
         mkdirSync(mp, { recursive: true })
       }
