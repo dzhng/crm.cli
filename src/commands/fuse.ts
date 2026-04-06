@@ -3,6 +3,7 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
+  realpathSync,
   unlinkSync,
   writeFileSync,
 } from 'node:fs'
@@ -30,14 +31,22 @@ function ensureDir(dir: string): void {
 //   → spawn("/usr/local/bin/crm", ["__daemon", ...])
 //
 // Runtime (npm i -g, bun i -g, bun run src/cli.ts):
-//   process.execPath = "node" or "bun", argv[1] = ".../cli.js" or "src/cli.ts"
-//   → returns [script] so the runtime knows which file to execute
-//   → spawn("node", [".../cli.js", "__daemon", ...])
+//   process.execPath = "node" or "bun", argv[1] = script path
+//   → returns [resolved script] so the runtime knows which file to execute
+//   → spawn("node", [".../dist/cli.js", "__daemon", ...])
 //   → spawn("bun", ["src/cli.ts", "__daemon", ...])
+//
+// npm i -g caveat: argv[1] is a symlink like ".../bin/crm" (no .js extension)
+// that points to ".../dist/cli.js". We resolve the symlink to get the real path.
 function getDaemonArgs(): string[] {
   const script = process.argv[1]
-  if (script && /\.[tj]s$/.test(script)) {
-    return [script]
+  if (!script) {
+    return []
+  }
+  // Resolve symlinks (npm global bin creates "crm" → "dist/cli.js" symlinks)
+  const resolved = realpathSync(script)
+  if (/\.[tj]s$/.test(resolved)) {
+    return [resolved]
   }
   return []
 }
