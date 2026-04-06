@@ -169,14 +169,6 @@ export function loadConfig(opts: {
 }): CRMConfig {
   let config = defaultConfig()
 
-  // Env var overrides for phone
-  if (process.env.CRM_PHONE_DEFAULT_COUNTRY) {
-    config.phone.default_country = process.env.CRM_PHONE_DEFAULT_COUNTRY
-  }
-  if (process.env.CRM_PHONE_DISPLAY) {
-    config.phone.display = process.env.CRM_PHONE_DISPLAY
-  }
-
   // Resolve config file — auto-create with sensible defaults on first run
   const configPath =
     opts.configPath ||
@@ -194,6 +186,14 @@ export function loadConfig(opts: {
     config = mergeConfig(config, parsed)
   } catch (_e) {
     console.error(`Warning: could not parse config file ${configPath}`)
+  }
+
+  // Env var overrides (take priority over config file)
+  if (process.env.CRM_PHONE_DEFAULT_COUNTRY) {
+    config.phone.default_country = process.env.CRM_PHONE_DEFAULT_COUNTRY
+  }
+  if (process.env.CRM_PHONE_DISPLAY) {
+    config.phone.display = process.env.CRM_PHONE_DISPLAY
   }
 
   // DB path resolution: --db flag > CRM_DB env > config file > default (~/.crm/crm.db)

@@ -275,11 +275,10 @@ export function registerContactCommands(program: Command) {
       }
       for (const p of opts.addPhone) {
         const norm = normalizePhone(p, config.phone.default_country)
-        if (phones.includes(norm)) {
-          die(`Error: duplicate phone "${p}" — already on this contact`)
+        if (!phones.includes(norm)) {
+          await checkDupePhone(db, norm, 'contacts', c.id)
+          phones.push(norm)
         }
-        await checkDupePhone(db, norm, 'contacts', c.id)
-        phones.push(norm)
       }
       for (const p of opts.rmPhone) {
         const norm = tryNormalizePhone(p, config.phone.default_country)

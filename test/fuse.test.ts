@@ -11,7 +11,7 @@ import {
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 
-import { createTestContext, type TestContext } from './helpers.ts'
+import { canMount, createTestContext, type TestContext } from './helpers.ts'
 
 // Use shell echo instead of fs.writeFileSync for NFS writes.
 // Bun's writeFileSync uses O_TRUNC which triggers a macOS NFS kernel panic
@@ -19,16 +19,6 @@ import { createTestContext, type TestContext } from './helpers.ts'
 function writeFile(path: string, content: string) {
   execSync(`printf '%s' '${content.replace(/'/g, "'\\''")}' > '${path}'`)
 }
-
-/**
- * Mount tests — mount the CRM as a virtual filesystem via `crm mount`
- * (NFS on macOS, FUSE on Linux) and test read/write via standard fs calls.
- */
-
-const canMount =
-  existsSync('/dev/fuse') || // Linux FUSE
-  (process.platform === 'darwin' &&
-    Bun.spawnSync(['which', 'cargo']).exitCode === 0) // macOS NFS
 
 // Clean up stale FUSE mounts from previous interrupted test runs.
 // When a test run is killed (Ctrl+C, crash, OOM), afterAll never fires and

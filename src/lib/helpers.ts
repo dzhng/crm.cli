@@ -426,17 +426,12 @@ export function showEntity(detail: Record<string, unknown>, fmt: string) {
       lines.push(`${k}: ${v}`)
     }
   }
-  // Show phones with both raw E.164 and display format
+  // Replace raw E.164 phones with human-readable display format
   const displayPhones = detail._display_phones as string[] | undefined
-  const phones = detail.phones as string[] | undefined
-  if (displayPhones?.length && phones?.length) {
+  if (displayPhones?.length) {
     const idx = lines.findIndex((l) => l.startsWith('phones:'))
     if (idx >= 0) {
-      const combined = phones.map((raw: string, i: number) => {
-        const disp = displayPhones[i]
-        return disp && disp !== raw ? `${raw} (${disp})` : raw
-      })
-      lines[idx] = `phones: ${combined.join(', ')}`
+      lines[idx] = `phones: ${displayPhones.join(', ')}`
     }
   }
   console.log(lines.join('\n'))

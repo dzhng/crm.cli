@@ -497,20 +497,24 @@ describe('company website normalization', () => {
     expect(show3).toContain('Acme')
   })
 
-  test('add-website rejects duplicate in different format', () => {
+  test('add-website silently skips duplicate in different format', () => {
     const ctx = createTestContext()
     const id = ctx
       .runOK('company', 'add', '--name', 'Acme', '--website', 'acme.com')
       .trim()
 
-    const result = ctx.runFail(
+    // Same site with protocol and www — should not create a second entry
+    ctx.runOK('company', 'edit', id, '--add-website', 'https://www.acme.com')
+
+    const data = ctx.runJSON<{ websites: string[] }>(
       'company',
-      'edit',
+      'show',
       id,
-      '--add-website',
-      'https://www.acme.com',
+      '--format',
+      'json',
     )
-    expect(result.stderr).toContain('duplicate')
+    expect(data.websites).toHaveLength(1)
+    expect(data.websites[0]).toBe('acme.com')
   })
 
   test('rm-website matches after normalization', () => {
@@ -922,20 +926,24 @@ describe('company phone normalization', () => {
     expect(companies[0].phones[0]).toBe('+442079460958')
   })
 
-  test('add-phone rejects duplicate in different format', () => {
+  test('add-phone silently skips duplicate in different format', () => {
     const ctx = createTestContext()
     const id = ctx
       .runOK('company', 'add', '--name', 'Acme', '--phone', '+1-212-555-1234')
       .trim()
 
-    const result = ctx.runFail(
+    // Same number in national format — should not create a second entry
+    ctx.runOK('company', 'edit', id, '--add-phone', '(212) 555-1234')
+
+    const data = ctx.runJSON<{ phones: string[] }>(
       'company',
-      'edit',
+      'show',
       id,
-      '--add-phone',
-      '(212) 555-1234',
+      '--format',
+      'json',
     )
-    expect(result.stderr).toContain('duplicate')
+    expect(data.phones).toHaveLength(1)
+    expect(data.phones[0]).toBe('+12125551234')
   })
 })
 

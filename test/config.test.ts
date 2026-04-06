@@ -454,7 +454,7 @@ describe('config resolution', () => {
   })
 
   test('crm.toml in current directory is found', () => {
-    const ctx = createTestContext()
+    const ctx = createTestContext({ noConfig: true })
     writeFileSync(
       join(ctx.dir, 'crm.toml'),
       `[pipeline]\nstages = ["local-1", "local-2", "local-3"]\n`,
@@ -640,7 +640,7 @@ describe('config resolution', () => {
   })
 
   test('config sets default output format', () => {
-    const ctx = createTestContext()
+    const ctx = createTestContext({ noConfig: true })
     writeFileSync(join(ctx.dir, 'crm.toml'), `[defaults]\nformat = "json"\n`)
 
     ctx.runOK('contact', 'add', '--name', 'Jane')
@@ -651,7 +651,7 @@ describe('config resolution', () => {
   })
 
   test('--format flag overrides config default', () => {
-    const ctx = createTestContext()
+    const ctx = createTestContext({ noConfig: true })
     writeFileSync(join(ctx.dir, 'crm.toml'), `[defaults]\nformat = "json"\n`)
 
     ctx.runOK('contact', 'add', '--name', 'Jane')

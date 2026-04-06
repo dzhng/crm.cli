@@ -188,11 +188,10 @@ export function registerCompanyCommands(program: Command) {
       }
       for (const w of opts.addWebsite) {
         const norm = normalizeWebsite(w)
-        if (websites.includes(norm)) {
-          die(`Error: duplicate website "${w}" — already on this company`)
+        if (!websites.includes(norm)) {
+          await checkDupeWebsite(db, norm, co.id)
+          websites.push(norm)
         }
-        await checkDupeWebsite(db, norm, co.id)
-        websites.push(norm)
       }
       for (const w of opts.rmWebsite) {
         const norm = normalizeWebsite(w)
@@ -200,11 +199,10 @@ export function registerCompanyCommands(program: Command) {
       }
       for (const p of opts.addPhone) {
         const norm = normalizePhone(p, config.phone.default_country)
-        if (phones.includes(norm)) {
-          die(`Error: duplicate phone "${p}" — already on this company`)
+        if (!phones.includes(norm)) {
+          await checkDupePhone(db, norm, 'companies', co.id)
+          phones.push(norm)
         }
-        await checkDupePhone(db, norm, 'companies', co.id)
-        phones.push(norm)
       }
       for (const p of opts.rmPhone) {
         const norm = tryNormalizePhone(p, config.phone.default_country)

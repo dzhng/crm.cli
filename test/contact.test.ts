@@ -1053,10 +1053,11 @@ describe('contact phone normalization', () => {
     expect(contacts[0].phones[0]).toBe('+12125551234')
   })
 
-  test('national format fails without default_country when no country code', () => {
+  test('bare digits with default_country set normalizes to E.164', () => {
     const ctx = createTestContext()
-    // Without default_country and without +country prefix, should fail
-    const result = ctx.runFail(
+    // With default_country=US, bare digits (no + prefix, no formatting) should work
+    ctx.runWithEnv(
+      { CRM_PHONE_DEFAULT_COUNTRY: 'US' },
       'contact',
       'add',
       '--name',
@@ -1064,7 +1065,14 @@ describe('contact phone normalization', () => {
       '--phone',
       '2125551234',
     )
-    expect(result.stderr).toContain('country')
+
+    const contacts = ctx.runJSON<Array<{ phones: string[] }>>(
+      'contact',
+      'list',
+      '--format',
+      'json',
+    )
+    expect(contacts[0].phones[0]).toBe('+12125551234')
   })
 
   test('rm-phone matches across formats', () => {
@@ -1095,20 +1103,24 @@ describe('contact phone normalization', () => {
     expect(contacts[0].phones[0]).toBe('+442079460958')
   })
 
-  test('add-phone rejects duplicate in different format', () => {
+  test('add-phone silently skips duplicate in different format', () => {
     const ctx = createTestContext()
     const id = ctx
       .runOK('contact', 'add', '--name', 'Jane', '--phone', '+1-212-555-1234')
       .trim()
 
-    const result = ctx.runFail(
+    // Same number in national format — should not create a second entry
+    ctx.runOK('contact', 'edit', id, '--add-phone', '(212) 555-1234')
+
+    const data = ctx.runJSON<{ phones: string[] }>(
       'contact',
-      'edit',
+      'show',
       id,
-      '--add-phone',
-      '(212) 555-1234',
+      '--format',
+      'json',
     )
-    expect(result.stderr).toContain('duplicate')
+    expect(data.phones).toHaveLength(1)
+    expect(data.phones[0]).toBe('+12125551234')
   })
 
   test('UK number normalization', () => {
@@ -1128,20 +1140,17 @@ describe('contact phone normalization', () => {
     expect(show).toContain('Jane')
   })
 
-  test('display format e164', () => {
+  test('JSON export uses E.164 format', () => {
     const ctx = createTestContext()
-    ctx.runWithEnv(
-      { CRM_PHONE_DISPLAY: 'e164' },
-      'contact',
-      'add',
-      '--name',
-      'Jane',
-      '--phone',
-      '+1-212-555-1234',
-    )
+    ctx.runOK('contact', 'add', '--name', 'Jane', '--phone', '+1-212-555-1234')
 
-    const show = ctx.runOK('contact', 'show', '+12125551234')
-    expect(show).toContain('+12125551234')
+    const contacts = ctx.runJSON<Array<{ phones: string[] }>>(
+      'contact',
+      'list',
+      '--format',
+      'json',
+    )
+    expect(contacts[0].phones[0]).toBe('+12125551234')
   })
 })
 

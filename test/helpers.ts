@@ -1,8 +1,21 @@
-import { mkdtempSync } from 'node:fs'
+import { existsSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
+/** Whether the current platform supports FUSE/NFS mount tests */
+export const canMount = existsSync('/dev/fuse') // Linux FUSE only — macOS NFS mount causes kernel panics, skip for now
+
 const CRM_BIN = join(import.meta.dir, '..', 'src', 'cli.ts')
+
+const TEST_CONFIG = `[phone]
+default_country = "US"
+display = "international"
+
+[pipeline]
+stages = ["lead", "qualified", "proposal", "negotiation", "closed-won", "closed-lost"]
+won_stage = "closed-won"
+lost_stage = "closed-lost"
+`
 
 export interface RunResult {
   exitCode: number
@@ -10,16 +23,23 @@ export interface RunResult {
   stdout: string
 }
 
-export function createTestContext() {
+export function createTestContext(opts?: { noConfig?: boolean }) {
   const dir = mkdtempSync(join(tmpdir(), 'crm-test-'))
   const dbPath = join(dir, 'test.db')
+  const configPath = join(dir, 'config.toml')
+  if (!opts?.noConfig) {
+    writeFileSync(configPath, TEST_CONFIG)
+  }
+  const baseEnv = opts?.noConfig
+    ? { ...process.env, NO_COLOR: '1' }
+    : { ...process.env, NO_COLOR: '1', CRM_CONFIG: configPath }
 
   function run(...args: string[]): RunResult {
     const proc = Bun.spawnSync(
       ['bun', 'run', CRM_BIN, '--db', dbPath, ...args],
       {
         cwd: dir,
-        env: { ...process.env, NO_COLOR: '1' },
+        env: baseEnv,
       },
     )
     return {
@@ -62,7 +82,7 @@ export function createTestContext() {
       ['bun', 'run', CRM_BIN, '--db', dbPath, ...args],
       {
         cwd: dir,
-        env: { ...process.env, NO_COLOR: '1', ...env },
+        env: { ...baseEnv, ...env },
       },
     )
     return {
@@ -72,7 +92,7 @@ export function createTestContext() {
     }
   }
 
-  return { dir, dbPath, run, runOK, runFail, runJSON, runWithEnv }
+  return { dir, dbPath, configPath, run, runOK, runFail, runJSON, runWithEnv }
 }
 
 export type TestContext = ReturnType<typeof createTestContext>
