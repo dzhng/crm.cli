@@ -244,7 +244,7 @@ async function _handleGetattr(
   }
 
   // Top-level virtual files
-  if (p === 'pipeline.json' || p === 'tags.json') {
+  if (p === 'pipeline.json' || p === 'tags.json' || p === 'llm.txt') {
     return { type: 'file' }
   }
 
