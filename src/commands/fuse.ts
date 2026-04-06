@@ -21,12 +21,19 @@ function ensureDir(dir: string): void {
   }
 }
 
-// When running via `bun run src/cli.ts`, process.execPath is `bun` and we need
-// to pass the script path. When running a compiled binary, process.execPath is
-// the binary itself and no extra args are needed.
+// Returns extra args needed between process.execPath and `__daemon`.
+//
+// The daemon is spawned as: spawn(process.execPath, [...getDaemonArgs(), '__daemon', ...])
+//
+// Compiled binary: process.execPath = "/usr/local/bin/crm"
+//   → spawn("/usr/local/bin/crm", ["__daemon", socket, db, ...])
+//
+// Development (bun run src/cli.ts): process.execPath = "bun", argv[1] = "src/cli.ts"
+//   → spawn("bun", ["run", "src/cli.ts", "__daemon", socket, db, ...])
+//   Without this, it would spawn "bun __daemon ..." which fails because
+//   bun doesn't know what __daemon is — it needs the script path.
 function getDaemonArgs(): string[] {
   const script = process.argv[1]
-  // If argv[1] is a .ts/.js file, we're running via a runtime (bun/node)
   if (script && /\.[tj]s$/.test(script)) {
     return ['run', script]
   }
