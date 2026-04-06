@@ -350,7 +350,7 @@
         >
         <div class="links">
           <a href="https://github.com/dzhng/crm.cli">GitHub</a>
-          <a href="https://www.npmjs.com/package/crm.cli">npm</a>
+          <a href="https://www.npmjs.com/package/@dzhng/crm.cli">npm</a>
           <a href="https://github.com/dzhng/crm.cli#cli-reference">Docs</a>
           <a href="https://duet.so">Duet</a>
         </div>
@@ -367,7 +367,7 @@
         </p>
         <div class="install-box">
           <span class="prompt">$</span>
-          bun install -g crm.cli
+          npm install -g @dzhng/crm.cli
         </div>
         <p class="sub">
           No server. No Docker. No accounts. No GUI.
@@ -503,6 +503,9 @@
             <pre><span class="comment"># Mount</span>
 <span class="line-prompt">$</span> <span class="cmd">crm mount</span> ~/crm
 
+<span class="comment"># Agent reads instructions first</span>
+<span class="line-prompt">$</span> cat ~/crm/llm.txt
+
 <span class="comment"># Browse contacts</span>
 <span class="line-prompt">$</span> ls ~/crm/contacts/
 <span class="line-prompt">$</span> cat ~/crm/contacts/ct_01...jane-doe.json
@@ -523,29 +526,34 @@
           <div>
             <pre><span class="comment"># Filesystem layout</span>
 ~/crm/
+├── llm.txt              <span class="comment"># agent instructions</span>
 ├── contacts/
 │   ├── ct_01...jane-doe.json
 │   ├── _by-email/
-│   ├── _by-phone/
+│   ├── _by-phone/       <span class="comment"># E.164 filenames</span>
 │   ├── _by-linkedin/
 │   ├── _by-company/
 │   └── _by-tag/
 ├── companies/
 │   ├── co_01...acme-corp.json
 │   ├── _by-website/
+│   ├── _by-phone/
 │   └── _by-tag/
 ├── deals/
 │   ├── dl_01...acme-enterprise.json
 │   ├── _by-stage/
-│   └── _by-company/
+│   ├── _by-company/
+│   └── _by-tag/
 ├── activities/
 │   ├── _by-contact/
+│   ├── _by-company/
 │   └── _by-type/
 ├── reports/
 │   ├── pipeline.json
-│   ├── stale.json
-│   └── forecast.json
-├── search/
+│   ├── forecast.json
+│   └── stale.json
+├── search/              <span class="comment"># filename = query</span>
+├── pipeline.json
 └── tags.json</pre>
           </div>
         </div>
@@ -575,7 +583,7 @@
           MIT License &middot;
           <a href="https://github.com/dzhng/crm.cli">GitHub</a>
           &middot;
-          <a href="https://www.npmjs.com/package/crm.cli">npm</a>
+          <a href="https://www.npmjs.com/package/@dzhng/crm.cli">npm</a>
           &middot; Sponsored by <a href="https://duet.so">Duet</a>
         </p>
       </div>
