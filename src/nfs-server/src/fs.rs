@@ -102,6 +102,7 @@ impl NFSFileSystem for CrmNfs {
     }
 
     async fn lookup(&self, dirid: fileid3, filename: &filename3) -> Result<fileid3, nfsstat3> {
+        eprintln!("NFS lookup: dirid={} name={}", dirid, String::from_utf8_lossy(&filename.0));
         let name = std::str::from_utf8(&filename.0).map_err(|_| nfsstat3::NFS3ERR_INVAL)?;
 
         // . and ..
@@ -134,6 +135,7 @@ impl NFSFileSystem for CrmNfs {
     }
 
     async fn getattr(&self, id: fileid3) -> Result<fattr3, nfsstat3> {
+        eprintln!("NFS getattr: id={}", id);
         let path = self.handles.get_path(id).ok_or(nfsstat3::NFS3ERR_STALE)?;
 
         let resp = self.daemon.op("getattr", &path).await.map_err(|_| nfsstat3::NFS3ERR_IO)?;
@@ -151,10 +153,13 @@ impl NFSFileSystem for CrmNfs {
     }
 
     async fn setattr(&self, id: fileid3, setattr: sattr3) -> Result<fattr3, nfsstat3> {
-        // Handle truncate (size = 0) by clearing write buffer
-        if let set_size3::size(0) = setattr.size {
+        eprintln!("NFS setattr: id={} size={:?}", id, setattr.size);
+        if let set_size3::size(new_size) = setattr.size {
             let mut bufs = self.write_bufs.lock().unwrap();
             bufs.insert(id, Vec::new());
+            // Return attrs reflecting the truncated size — the NFS client
+            // expects the post-op attrs to match the requested size.
+            return Ok(self.make_file_attr(id, new_size));
         }
         self.getattr(id).await
     }
@@ -181,6 +186,7 @@ impl NFSFileSystem for CrmNfs {
     }
 
     async fn write(&self, id: fileid3, offset: u64, data: &[u8]) -> Result<fattr3, nfsstat3> {
+        eprintln!("NFS write: id={} offset={} len={}", id, offset, data.len());
         let path = self.handles.get_path(id).ok_or(nfsstat3::NFS3ERR_STALE)?;
 
         // Accumulate in write buffer
@@ -213,6 +219,7 @@ impl NFSFileSystem for CrmNfs {
         filename: &filename3,
         _attr: sattr3,
     ) -> Result<(fileid3, fattr3), nfsstat3> {
+        eprintln!("NFS create: dirid={} name={}", dirid, String::from_utf8_lossy(&filename.0));
         let name = std::str::from_utf8(&filename.0).map_err(|_| nfsstat3::NFS3ERR_INVAL)?;
         let dir_path = self.handles.get_path(dirid).ok_or(nfsstat3::NFS3ERR_STALE)?;
         let child_path = if dir_path.is_empty() {
@@ -237,6 +244,7 @@ impl NFSFileSystem for CrmNfs {
     }
 
     async fn remove(&self, dirid: fileid3, filename: &filename3) -> Result<(), nfsstat3> {
+        eprintln!("NFS remove: dirid={} name={}", dirid, String::from_utf8_lossy(&filename.0));
         let name = std::str::from_utf8(&filename.0).map_err(|_| nfsstat3::NFS3ERR_INVAL)?;
         let dir_path = self.handles.get_path(dirid).ok_or(nfsstat3::NFS3ERR_STALE)?;
         let child_path = if dir_path.is_empty() {
