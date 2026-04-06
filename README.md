@@ -44,11 +44,9 @@ crm dupes --threshold 0.5
 ## Install
 
 ```bash
-# Install globally via bun (recommended)
+# Install globally
 bun install -g @dzhng/crm.cli
-
-# Or npx without installing
-bunx @dzhng/crm.cli contact list
+npm install -g @dzhng/crm.cli
 
 # Or install the compiled binary
 curl -fsSL https://raw.githubusercontent.com/dzhng/crm.cli/main/install.sh | sh
@@ -1250,15 +1248,9 @@ search_limit = 20               # max results for search/ virtual files
 ### Package Manager
 
 ```bash
-# Install globally via bun (recommended)
+# Install globally
 bun install -g @dzhng/crm.cli
-
-# Or via npm
 npm install -g @dzhng/crm.cli
-
-# Or use without installing
-bunx @dzhng/crm.cli contact list
-npx @dzhng/crm.cli contact list
 ```
 
 ### Compiled Binary
