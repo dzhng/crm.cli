@@ -4,7 +4,7 @@
 
 **A headless, CLI-first CRM for developers who do sales.** Contacts, deals, and pipeline in a single SQLite file — queryable from your terminal, composable with Unix tools, and mountable as a virtual filesystem so any tool that reads files (Claude Code, Codex, grep, jq, vim) has full CRM access without any integration.
 
-No server. No Docker. No accounts. No GUI. Just `bun install -g @dzhng/crm.cli` and go.
+No server. No Docker. No accounts. No GUI. Just `npm install -g @dzhng/crm.cli` and go.
 
 > **Sponsored by [Duet](https://duet.so)** — a cloud agent workspace with persistent AI. Set up crm.cli in your own private cloud computer and run it with Claude Code or Codex — no local setup required. [Try Duet &rarr;](https://duet.so)
 
@@ -44,9 +44,8 @@ crm dupes --threshold 0.5
 ## Install
 
 ```bash
-# Install globally
-bun install -g @dzhng/crm.cli
 npm install -g @dzhng/crm.cli
+# or: bun install -g @dzhng/crm.cli
 
 # Or install the compiled binary
 curl -fsSL https://raw.githubusercontent.com/dzhng/crm.cli/main/install.sh | sh
@@ -1248,9 +1247,8 @@ search_limit = 20               # max results for search/ virtual files
 ### Package Manager
 
 ```bash
-# Install globally
-bun install -g @dzhng/crm.cli
 npm install -g @dzhng/crm.cli
+# or: bun install -g @dzhng/crm.cli
 ```
 
 ### Compiled Binary
