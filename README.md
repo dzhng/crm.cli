@@ -1221,10 +1221,20 @@ max_recent_activity = 10        # how many activities to inline in entity files
 search_limit = 20               # max results for search/ virtual files
 ```
 
+### How Mount Works
+
+`crm mount` starts two background processes:
+
+1. **Daemon** (`crm __daemon`) — a Unix socket server that handles all business logic (reads, writes, search, validation, normalization). The `crm` binary spawns itself with a hidden `__daemon` subcommand, so this works identically whether installed via npm, compiled binary, or running from source during development.
+
+2. **Filesystem bridge** — connects the OS filesystem layer to the daemon:
+   - **macOS:** An NFS v3 server (Rust binary, auto-compiled on first mount via Cargo) that translates NFS operations to daemon socket calls. Mounted via `mount_nfs`.
+   - **Linux:** A FUSE helper (C binary, auto-compiled on first mount via gcc) that translates FUSE syscalls to daemon socket calls.
+
 ### Platform Notes
 
-- **Linux:** Works out of the box (FUSE is in the kernel).
-- **macOS:** Requires [FUSE-T](https://www.fuse-t.org/) (`brew install fuse-t`, recommended) or [macFUSE](https://osxfuse.github.io/) (`brew install --cask macfuse`).
+- **Linux:** Works out of the box (FUSE is in the kernel). Requires `libfuse3-dev` and `gcc`.
+- **macOS:** Requires Rust toolchain for the NFS server (`curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`). No FUSE or kernel extensions needed.
 - **Windows:** Not supported (use WSL).
 - **Containers/sandboxes:** FUSE requires `--privileged` or `--device /dev/fuse`. If unavailable, use the CLI with `--format json` instead.
 

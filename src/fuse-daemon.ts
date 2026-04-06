@@ -1,15 +1,22 @@
 /**
  * FUSE daemon — serves CRM data over a Unix socket.
  *
- * The C FUSE helper (crm-fuse) handles FUSE3 syscalls and forwards all data
- * operations here over a Unix domain socket. This keeps all business logic
- * (enriched JSON, validation, writes, phone normalization, search) in TS.
+ * Architecture:
+ *   `crm mount` spawns this daemon as a background process via `crm __daemon`.
+ *   The daemon listens on a Unix socket. On macOS, the NFS server (Rust binary)
+ *   connects to this socket. On Linux, the FUSE helper (C binary) connects.
+ *   Both forward filesystem operations here; this daemon handles all business
+ *   logic (enriched JSON, validation, writes, phone normalization, search).
  *
- * Protocol: newline-delimited JSON.
+ * How it's invoked:
+ *   The `crm` binary spawns itself: `crm __daemon <socket> <db> [stages...]`
+ *   This works identically for compiled binaries and `bun run src/cli.ts`.
+ *   The __daemon subcommand is handled in cli.ts before commander parses,
+ *   and calls startDaemon() exported from this file.
+ *
+ * Protocol: newline-delimited JSON over Unix socket.
  *   Request:  {"op":"getattr"|"readdir"|"read"|"write"|"unlink","path":"/...", ...}\n
  *   Response: {...}\n
- *
- * Usage: bun run src/fuse-daemon.ts <socket-path> <db-path> [stage1 stage2 ...]
  */
 
 import { existsSync, unlinkSync } from 'node:fs'
