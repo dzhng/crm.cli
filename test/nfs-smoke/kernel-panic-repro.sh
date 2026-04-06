@@ -1,21 +1,17 @@
 #!/bin/bash
 # Reproduces a macOS kernel panic caused by Bun's writeFileSync on NFS mounts.
 #
-# writeFileSync uses O_TRUNC which triggers SETATTR(size=0) in the NFS client.
-# After ~30+ such operations, the kernel's VFS vnode state corrupts and panics.
-#
-# Shell echo/printf uses a simpler syscall path and does NOT trigger the bug.
+# writeFileSync uses O_CREAT|O_TRUNC which panics the macOS NFS client
+# on the very first call. Shell echo/printf does NOT trigger the bug.
 #
 # Usage:
-#   ./test/nfs-smoke/kernel-panic-repro.sh          # default 50 iterations
-#   ./test/nfs-smoke/kernel-panic-repro.sh 100       # custom iteration count
+#   ./test/nfs-smoke/kernel-panic-repro.sh
 #
 # WARNING: This WILL kernel panic your Mac if the bug is present.
 # Only run this when you're actively working on a fix.
 
 set -e
 
-ITERATIONS=${1:-50}
 PROJECT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
 CRM_NFS="$HOME/.crm/bin/crm-nfs"
 
@@ -50,26 +46,12 @@ sleep 1
 echo "Mounting..."
 /sbin/mount_nfs -o locallocks,vers=3,tcp,port=$PORT,mountport=$PORT,soft,intr,timeo=10,retrans=3,noac 127.0.0.1:/ "$MNT"
 
-echo "Running $ITERATIONS writeFileSync iterations (O_TRUNC)..."
+echo "Calling writeFileSync (O_CREAT|O_TRUNC) on NFS mount..."
 echo "If this kernel panics, the bug is still present."
 echo ""
 
 bun -e "
 const fs = require('fs');
-const path = require('path');
-const mp = '$MNT';
-const n = $ITERATIONS;
-
-for (let i = 0; i < n; i++) {
-  const file = path.join(mp, 'contacts', 'test-' + i + '.json');
-  // Create (triggers CREATE)
-  fs.writeFileSync(file, JSON.stringify({name: 'Test' + i, emails: ['t' + i + '@x.com']}));
-  // Overwrite (triggers SETATTR with O_TRUNC — this is what panics)
-  fs.writeFileSync(file, JSON.stringify({name: 'Test' + i + 'v2', emails: ['t' + i + '@x.com']}));
-  process.stdout.write('\r  ' + (i + 1) + '/' + n);
-}
-console.log('');
-console.log('All iterations completed without kernel panic.');
+fs.writeFileSync('$MNT/contacts/new.json', JSON.stringify({name:'Test',emails:['t@x.com']}));
+console.log('PASS: writeFileSync survived without kernel panic.');
 "
-
-echo "PASS: macOS survived $ITERATIONS O_TRUNC write cycles on NFS."
