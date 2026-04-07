@@ -3,7 +3,7 @@ import type { Command } from 'commander'
 import type { Company, Contact } from '../drizzle-schema'
 import * as schema from '../drizzle-schema'
 import { companyToRow, contactToRow, safeJSON } from '../format'
-import { getCtx, levenshtein } from '../lib/helpers'
+import { diceCoefficient, getCtx, levenshtein } from '../lib/helpers'
 
 interface DupeResult {
   left: Record<string, unknown>
@@ -100,9 +100,12 @@ function contactDupeReasons(a: Contact, b: Contact): string[] {
   const bName = (b.name || '').toLowerCase()
   const nameDistance = levenshtein(aName, bName)
   const maxLen = Math.max(aName.length, bName.length)
-  const nameSimilarity = maxLen > 0 ? 1 - nameDistance / maxLen : 0
+  const levSimilarity = maxLen > 0 ? 1 - nameDistance / maxLen : 0
+  // Dice coefficient catches prefix/suffix/containment cases that Levenshtein
+  // misses (e.g. "Acme" vs "Acme Inc"). Use the max of both metrics.
+  const nameSimilarity = Math.max(levSimilarity, diceCoefficient(aName, bName))
 
-  if (nameSimilarity >= 0.5) {
+  if (nameSimilarity >= 0.6) {
     reasons.push('similar name')
   }
 
@@ -186,8 +189,9 @@ function companyDupeReasons(a: Company, b: Company): string[] {
   const bName = (b.name || '').toLowerCase()
   const nameDistance = levenshtein(aName, bName)
   const maxLen = Math.max(aName.length, bName.length)
-  const nameSimilarity = maxLen > 0 ? 1 - nameDistance / maxLen : 0
-  if (nameSimilarity >= 0.5) {
+  const levSimilarity = maxLen > 0 ? 1 - nameDistance / maxLen : 0
+  const nameSimilarity = Math.max(levSimilarity, diceCoefficient(aName, bName))
+  if (nameSimilarity >= 0.6) {
     reasons.push('similar name')
   }
 

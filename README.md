@@ -207,12 +207,12 @@ Accepts ID, any email, any phone number, or any social handle (LinkedIn, X, Blue
 #### `crm contact edit <id-or-email-or-phone-or-handle>`
 
 ```bash
-crm contact edit jane@acme.com --name "Jane Smith"
+crm contact edit jane@acme.com --name "Jane Smith"          # by email
+crm contact edit "+1-212-555-1234" --add-tag vip             # by phone
+crm contact edit janedoe --set title=CEO                     # by social handle (LinkedIn, X, etc.)
 crm contact edit ct_01J8Z... --add-email jane.personal@gmail.com --rm-email old@acme.com
 crm contact edit ct_01J8Z... --add-phone "+44-20-7946-0958" --rm-phone "+1-310-555-9876"
 crm contact edit ct_01J8Z... --add-company "Acme Ventures" --rm-company "Old Corp"
-crm contact edit ct_01J8Z... --set title=CEO --set source=referral
-crm contact edit jane@acme.com --add-tag vip --rm-tag cold
 ```
 
 | Flag            | Description                                            |
@@ -236,16 +236,20 @@ crm contact edit jane@acme.com --add-tag vip --rm-tag cold
 #### `crm contact rm <id-or-email-or-phone-or-handle>`
 
 ```bash
-crm contact rm jane@acme.com
-crm contact rm "+1-212-555-1234" --force    # skip confirmation
+crm contact rm jane@acme.com                # by email
+crm contact rm "+1-212-555-1234" --force     # by phone (skip confirmation)
+crm contact rm janedoe                       # by social handle (LinkedIn, X, etc.)
 ```
 
 Prompts for confirmation unless `--force` is passed. Removes the contact and unlinks from deals/companies (does not delete linked entities).
 
-#### `crm contact merge <id> <id>`
+#### `crm contact merge <ref> <ref>`
 
 ```bash
-crm contact merge ct_01J8Z... ct_02K9A...
+crm contact merge ct_01J8Z... ct_02K9A...                 # by ID
+crm contact merge jane@acme.com jane.doe@gmail.com        # by email
+crm contact merge "+1-212-555-1234" "+44-20-7946-0958"    # by phone
+crm contact merge janedoe janetdoe                         # by social handle
 ```
 
 Merges two contacts. Keeps the first, absorbs data from the second. Emails, phones, companies, tags, custom fields, and activity history are combined. Deals linked to the second contact are relinked to the first. The first contact's name and social handles take priority. Prints the surviving contact ID.
@@ -291,9 +295,9 @@ crm company list --tag enterprise --sort name
 #### `crm company show <id-or-website-or-phone>`
 
 ```bash
-crm company show acme.com
-crm company show co_01J8Z...
-crm company show "+1-212-555-1234"
+crm company show acme.com                  # by website
+crm company show co_01J8Z...               # by ID
+crm company show "+1-212-555-1234"         # by phone
 ```
 
 Accepts ID, any stored website, or any phone number. Shows company details plus all linked contacts and deals.
@@ -301,7 +305,8 @@ Accepts ID, any stored website, or any phone number. Shows company details plus 
 #### `crm company edit <id-or-website-or-phone>`
 
 ```bash
-crm company edit acme.com --name "Acme Inc" --set industry=Fintech
+crm company edit acme.com --name "Acme Inc" --set industry=Fintech     # by website
+crm company edit "+1-212-555-1234" --add-tag enterprise                 # by phone
 crm company edit co_01J8Z... --add-website acme.co.uk --add-phone "+44-20-7946-0958"
 crm company edit acme.com --rm-website old-acme.com --rm-phone "+1-415-555-0000"
 ```
@@ -320,12 +325,20 @@ crm company edit acme.com --rm-website old-acme.com --rm-phone "+1-415-555-0000"
 
 #### `crm company rm <id-or-website-or-phone>`
 
+```bash
+crm company rm acme.com                    # by website
+crm company rm "+1-212-555-1234" --force   # by phone (skip confirmation)
+crm company rm co_01J8Z...                 # by ID
+```
+
 Prompts for confirmation unless `--force` is passed. Unlinks contacts and deals but does not delete them.
 
-#### `crm company merge <id> <id>`
+#### `crm company merge <ref> <ref>`
 
 ```bash
-crm company merge co_01J8Z... co_02K9A...
+crm company merge co_01J8Z... co_02K9A...            # by ID
+crm company merge acme.com acme.co.uk                # by website
+crm company merge "+1-212-555-1234" "+44-20-7946-0958"  # by phone
 ```
 
 Merges two companies. Keeps the first, absorbs data from the second. Websites, phones, tags, and custom fields are combined. All contacts and deals linked to the second company are relinked to the first. The first company's name takes priority. Prints the surviving company ID.

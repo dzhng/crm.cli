@@ -512,3 +512,29 @@ export function levenshtein(a: string, b: string): number {
   }
   return dp[la][lb]
 }
+
+/** Dice coefficient (bigram overlap). Handles prefix/suffix/containment cases
+ *  that Levenshtein misses (e.g. "Acme" vs "Acme Inc" → 0.60). O(n+m). */
+export function diceCoefficient(a: string, b: string): number {
+  if (a === b) {
+    return 1
+  }
+  if (a.length < 2 || b.length < 2) {
+    return 0
+  }
+  const bigrams = (s: string): Map<string, number> => {
+    const m = new Map<string, number>()
+    for (let i = 0; i < s.length - 1; i++) {
+      const bg = s.slice(i, i + 2)
+      m.set(bg, (m.get(bg) || 0) + 1)
+    }
+    return m
+  }
+  const aBi = bigrams(a)
+  const bBi = bigrams(b)
+  let overlap = 0
+  for (const [bg, count] of aBi) {
+    overlap += Math.min(count, bBi.get(bg) || 0)
+  }
+  return (2 * overlap) / (a.length - 1 + b.length - 1)
+}

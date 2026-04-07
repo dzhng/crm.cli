@@ -9,36 +9,43 @@ describe('dupes', () => {
       'contact',
       'add',
       '--name',
-      'Jane Doe',
+      'Sarah Chen',
       '--email',
-      'jane@acme.com',
+      'sarah@stripe.com',
       '--company',
-      'Acme',
+      'Stripe',
     )
     ctx.runOK(
       'contact',
       'add',
       '--name',
-      'J. Doe',
+      'S. Chen',
       '--email',
-      'jane.doe@gmail.com',
+      'sarah.chen@gmail.com',
       '--company',
-      'Acme',
+      'Stripe',
     )
 
     const out = ctx.runOK('dupes', '--type', 'contact')
-    expect(out).toContain('Jane Doe')
-    expect(out).toContain('J. Doe')
+    expect(out).toContain('Sarah Chen')
+    expect(out).toContain('S. Chen')
   })
 
   test('finds likely duplicate companies by fuzzy name', () => {
     const ctx = createTestContext()
-    ctx.runOK('company', 'add', '--name', 'Acme', '--website', 'acme.com')
-    ctx.runOK('company', 'add', '--name', 'Acme Inc', '--website', 'acme.ai')
+    ctx.runOK('company', 'add', '--name', 'Ford Motor', '--website', 'ford.com')
+    ctx.runOK(
+      'company',
+      'add',
+      '--name',
+      'Ford Motors',
+      '--website',
+      'fordmotors.co',
+    )
 
     const out = ctx.runOK('dupes', '--type', 'company')
-    expect(out).toContain('Acme')
-    expect(out).toContain('Acme Inc')
+    expect(out).toContain('Ford Motor')
+    expect(out).toContain('Ford Motors')
   })
 
   test('json output includes candidate pairs and reasons', () => {
@@ -47,21 +54,21 @@ describe('dupes', () => {
       'contact',
       'add',
       '--name',
-      'Jane Doe',
+      'Sarah Chen',
       '--email',
-      'jane@acme.com',
+      'sarah@stripe.com',
       '--company',
-      'Acme',
+      'Stripe',
     )
     ctx.runOK(
       'contact',
       'add',
       '--name',
-      'J. Doe',
+      'S. Chen',
       '--email',
-      'jane.doe@gmail.com',
+      'sarah.chen@gmail.com',
       '--company',
-      'Acme',
+      'Stripe',
     )
 
     const results = ctx.runJSON<
@@ -79,22 +86,22 @@ describe('dupes', () => {
       'contact',
       'add',
       '--name',
-      'Jane Doe',
+      'Sarah Chen',
       '--email',
-      'jane@acme.com',
+      'sarah@stripe.com',
     )
     ctx.runOK(
       'contact',
       'add',
       '--name',
-      'Jane D',
+      'Sarah C',
       '--email',
-      'jane.personal@gmail.com',
+      'sarah.personal@gmail.com',
     )
 
     const out = ctx.runOK('dupes', '--type', 'contact')
-    expect(out).toContain('Jane Doe')
-    expect(out).toContain('Jane D')
+    expect(out).toContain('Sarah Chen')
+    expect(out).toContain('Sarah C')
   })
 
   test('finds likely duplicate companies by fuzzy name even when websites differ', () => {
@@ -103,22 +110,22 @@ describe('dupes', () => {
       'company',
       'add',
       '--name',
-      'Example Docs',
+      'Hershey Foods',
       '--website',
-      'example.com/research',
+      'hersheys.com/brands',
     )
     ctx.runOK(
       'company',
       'add',
       '--name',
-      'Example Docs Inc',
+      'Hershey Foods Inc',
       '--website',
-      'example.com/consulting',
+      'hersheys.com/corporate',
     )
 
     const out = ctx.runOK('dupes', '--type', 'company')
-    expect(out).toContain('Example Docs')
-    expect(out).toContain('Example Docs Inc')
+    expect(out).toContain('Hershey Foods')
+    expect(out).toContain('Hershey Foods Inc')
   })
 
   test('finds likely duplicate contacts by same company plus fuzzy name when emails differ', () => {
@@ -127,26 +134,26 @@ describe('dupes', () => {
       'contact',
       'add',
       '--name',
-      'Jane Doe',
+      'Michael Ross',
       '--email',
-      'jane@acme.com',
+      'michael@datadog.com',
       '--company',
-      'Acme',
+      'Datadog',
     )
     ctx.runOK(
       'contact',
       'add',
       '--name',
-      'Jane D',
+      'Mike Ross',
       '--email',
-      'jane.personal@gmail.com',
+      'mike.personal@gmail.com',
       '--company',
-      'Acme',
+      'Datadog',
     )
 
     const out = ctx.runOK('dupes', '--type', 'contact')
-    expect(out).toContain('Jane Doe')
-    expect(out).toContain('Jane D')
+    expect(out).toContain('Michael Ross')
+    expect(out).toContain('Mike Ross')
   })
 
   test('finds likely duplicate contacts by similar social handles', () => {
@@ -155,26 +162,26 @@ describe('dupes', () => {
       'contact',
       'add',
       '--name',
-      'Jane Doe',
+      'Lisa Park',
       '--email',
-      'jane@acme.com',
+      'lisa@figma.com',
       '--linkedin',
-      'janedoe',
+      'lisapark',
     )
     ctx.runOK(
       'contact',
       'add',
       '--name',
-      'Janet Doe',
+      'Lisa M. Park',
       '--email',
-      'janet@acme.com',
+      'lisampark@gmail.com',
       '--linkedin',
-      'janetdoe',
+      'lisampark',
     )
 
     const out = ctx.runOK('dupes', '--type', 'contact')
-    expect(out).toContain('Jane Doe')
-    expect(out).toContain('Janet Doe')
+    expect(out).toContain('Lisa Park')
+    expect(out).toContain('Lisa M. Park')
   })
 
   test('contacts with shared email domain flagged when names are similar', () => {
@@ -183,22 +190,22 @@ describe('dupes', () => {
       'contact',
       'add',
       '--name',
-      'Bob Johnson',
+      'Robert Kim',
       '--email',
-      'bob@acme.com',
+      'bob@salesforce.com',
     )
     ctx.runOK(
       'contact',
       'add',
       '--name',
-      'Robert Johnson',
+      'Roberto Kim',
       '--email',
-      'robert.johnson@acme.com',
+      'roberto.kim@salesforce.com',
     )
 
     const out = ctx.runOK('dupes', '--type', 'contact')
-    expect(out).toContain('Bob Johnson')
-    expect(out).toContain('Robert Johnson')
+    expect(out).toContain('Robert Kim')
+    expect(out).toContain('Roberto Kim')
   })
 
   test('completely different contacts are not flagged', () => {
@@ -207,21 +214,21 @@ describe('dupes', () => {
       'contact',
       'add',
       '--name',
-      'Alice Chen',
+      'Sarah Chen',
       '--email',
-      'alice@fintech.com',
+      'sarah@stripe.com',
       '--company',
-      'FinTech Co',
+      'Stripe',
     )
     ctx.runOK(
       'contact',
       'add',
       '--name',
-      'Bob Wilson',
+      'Mike Ross',
       '--email',
-      'bob@globex.com',
+      'mike@datadog.com',
       '--company',
-      'Globex',
+      'Datadog',
     )
 
     const results = ctx.runJSON<unknown[]>(
@@ -234,23 +241,148 @@ describe('dupes', () => {
     expect(results).toHaveLength(0)
   })
 
+  test('unrelated names like Walter and Sawyer are not flagged as similar', () => {
+    const ctx = createTestContext()
+    ctx.runOK(
+      'contact',
+      'add',
+      '--name',
+      'Walter',
+      '--email',
+      'walter@ford.com',
+    )
+    ctx.runOK(
+      'contact',
+      'add',
+      '--name',
+      'Sawyer',
+      '--email',
+      'sawyer@hersheys.com',
+    )
+
+    const results = ctx.runJSON<
+      Array<{ left: unknown; right: unknown; reasons: string[] }>
+    >('dupes', '--type', 'contact', '--format', 'json')
+    expect(results).toHaveLength(0)
+  })
+
+  test('catches company name with suffix added (Stripe vs Stripe Inc)', () => {
+    const ctx = createTestContext()
+    ctx.runOK('company', 'add', '--name', 'Stripe', '--website', 'stripe.com')
+    ctx.runOK(
+      'company',
+      'add',
+      '--name',
+      'Stripe Inc',
+      '--website',
+      'stripe.dev',
+    )
+
+    const results = ctx.runJSON<
+      Array<{ left: unknown; right: unknown; reasons: string[] }>
+    >('dupes', '--type', 'company', '--format', 'json')
+    expect(results.length).toBeGreaterThan(0)
+    expect(results[0].reasons).toContain('similar name')
+  })
+
+  test('catches company abbreviation (Datadog Technologies vs Datadog Tech)', () => {
+    const ctx = createTestContext()
+    ctx.runOK(
+      'company',
+      'add',
+      '--name',
+      'Datadog Technologies',
+      '--website',
+      'datadoghq.com',
+    )
+    ctx.runOK(
+      'company',
+      'add',
+      '--name',
+      'Datadog Tech',
+      '--website',
+      'datadog.io',
+    )
+
+    const results = ctx.runJSON<
+      Array<{ left: unknown; right: unknown; reasons: string[] }>
+    >('dupes', '--type', 'company', '--format', 'json')
+    expect(results.length).toBeGreaterThan(0)
+    expect(results[0].reasons).toContain('similar name')
+  })
+
+  test('catches contact name with middle initial (Sarah Chen vs Sarah A. Chen)', () => {
+    const ctx = createTestContext()
+    ctx.runOK(
+      'contact',
+      'add',
+      '--name',
+      'Sarah Chen',
+      '--email',
+      'sarah1@example.com',
+    )
+    ctx.runOK(
+      'contact',
+      'add',
+      '--name',
+      'Sarah A. Chen',
+      '--email',
+      'sarah2@example.com',
+    )
+
+    const results = ctx.runJSON<
+      Array<{ left: unknown; right: unknown; reasons: string[] }>
+    >('dupes', '--type', 'contact', '--format', 'json')
+    expect(results.length).toBeGreaterThan(0)
+    expect(results[0].reasons).toContain('similar name')
+  })
+
+  test('unrelated company names are not flagged (Salesforce vs Datadog)', () => {
+    const ctx = createTestContext()
+    ctx.runOK(
+      'company',
+      'add',
+      '--name',
+      'Salesforce',
+      '--website',
+      'salesforce.com',
+    )
+    ctx.runOK(
+      'company',
+      'add',
+      '--name',
+      'Datadog',
+      '--website',
+      'datadoghq.com',
+    )
+
+    const results = ctx.runJSON<unknown[]>(
+      'dupes',
+      '--type',
+      'company',
+      '--format',
+      'json',
+    )
+    expect(results).toHaveLength(0)
+  })
+
   test('threshold flag filters by similarity score', () => {
     const ctx = createTestContext()
     ctx.runOK(
       'contact',
       'add',
       '--name',
-      'Jane Doe',
+      'Sarah Chen',
       '--email',
-      'jane@acme.com',
+      'sarah@stripe.com',
     )
     ctx.runOK(
       'contact',
       'add',
       '--name',
-      'Jane D',
+      'Sarah C',
       '--email',
-      'jane.d@other.com',
+      'sarah.c@other.com',
     )
 
     // High threshold should filter out lower-confidence matches
@@ -281,18 +413,25 @@ describe('dupes', () => {
       'contact',
       'add',
       '--name',
-      'Jane Doe',
+      'Sarah Chen',
       '--email',
-      'jane1@acme.com',
+      'sarah1@stripe.com',
     )
-    ctx.runOK('contact', 'add', '--name', 'Jane D', '--email', 'jane2@acme.com')
     ctx.runOK(
       'contact',
       'add',
       '--name',
-      'Jan Doe',
+      'Sarah C',
       '--email',
-      'jane3@acme.com',
+      'sarah2@stripe.com',
+    )
+    ctx.runOK(
+      'contact',
+      'add',
+      '--name',
+      'Sara Chen',
+      '--email',
+      'sarah3@stripe.com',
     )
 
     const results = ctx.runJSON<unknown[]>(
@@ -319,20 +458,27 @@ describe('dupes', () => {
       'contact',
       'add',
       '--name',
-      'Jane Doe',
+      'Sarah Chen',
       '--email',
-      'jane@acme.com',
+      'sarah@stripe.com',
     )
     ctx.runOK(
       'contact',
       'add',
       '--name',
-      'J. Doe',
+      'S. Chen',
       '--email',
-      'j.doe@gmail.com',
+      's.chen@gmail.com',
     )
-    ctx.runOK('company', 'add', '--name', 'Acme', '--website', 'acme.com')
-    ctx.runOK('company', 'add', '--name', 'Acme Inc', '--website', 'acme.ai')
+    ctx.runOK('company', 'add', '--name', 'Ford Motor', '--website', 'ford.com')
+    ctx.runOK(
+      'company',
+      'add',
+      '--name',
+      'Ford Motors',
+      '--website',
+      'fordmotors.co',
+    )
 
     const results = ctx.runJSON<unknown[]>('dupes', '--format', 'json')
     expect(results.length).toBeGreaterThanOrEqual(2)
