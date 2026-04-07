@@ -51,6 +51,18 @@ npm install -g @dzhng/crm.cli
 curl -fsSL https://raw.githubusercontent.com/dzhng/crm.cli/main/install.sh | sh
 ```
 
+### Install as an AI agent skill
+
+Point your agent at the [skills folder](./skills) to give it full CRM knowledge — install instructions, every command, the filesystem interface, and tips for agents:
+
+```bash
+# Claude Code / Duet — install the skill from GitHub
+claude skills add https://github.com/dzhng/crm.cli/tree/main/skills
+
+# Or copy skills/SKILL.md into your agent's skills directory
+cp skills/SKILL.md ~/.your-agent/skills/crm-cli/SKILL.md
+```
+
 ## Storage
 
 Everything lives in a single SQLite file. Default: `~/.crm/crm.db`.
