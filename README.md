@@ -6,7 +6,7 @@
 
 No server. No Docker. No accounts. No GUI. Just `npm install -g @dzhng/crm.cli` and go.
 
-> **Sponsored by [Duet](https://duet.so)** — a cloud agent workspace with persistent AI. Set up crm.cli in your own private cloud computer and run it with Claude Code or Codex — no local setup required. [Try Duet &rarr;](https://duet.so)
+> **Created by [Duet](https://duet.so)** — a cloud agent workspace with persistent AI. Set up crm.cli in your own private cloud computer and run it with Claude Code or Codex — no local setup required. [Try Duet &rarr;](https://duet.so)
 
 ## Why crm.cli
 
@@ -1299,9 +1299,9 @@ GitHub Actions pipeline:
 
 ---
 
-## Sponsor
+## Created by Duet
 
-crm.cli is sponsored by **[Duet](https://duet.so)** — a cloud agent workspace where every user gets a private cloud computer with a persistent, always-on AI agent. Set up crm.cli in your own Duet workspace and run it with Claude Code or Codex in the cloud — no local setup required.
+crm.cli is created by **[Duet](https://duet.so)** — a cloud agent workspace where every user gets a private cloud computer with a persistent, always-on AI agent. Set up crm.cli in your own Duet workspace and run it with Claude Code or Codex in the cloud — no local setup required.
 
 [Try Duet &rarr;](https://duet.so)
 
