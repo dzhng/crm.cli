@@ -94,6 +94,10 @@ export async function openDB(dbPath: string): Promise<DB> {
 
   await client.execute('PRAGMA journal_mode=WAL')
   await client.execute('PRAGMA foreign_keys=ON')
+  // Wait up to 5s for a busy lock instead of erroring immediately. SQLite
+  // is single-writer; without this, concurrent writes (e.g. parallel CLI
+  // invocations or daemon + CLI) hit SQLITE_BUSY and surface to the user.
+  await client.execute('PRAGMA busy_timeout=5000')
 
   return db
 }
