@@ -18,7 +18,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "bun build src/cli.ts --outdir dist --target node --format esm --define __PKG_VERSION__=\"'$(node -p \"require('./package.json').version\")'\" --external @libsql/client --external drizzle-orm --external commander --external libphonenumber-js --external normalize-url --external toml --external ulid",
+    "build": "bun build src/cli.ts --outdir dist --target node --format esm --define __PKG_VERSION__=\"'$(node -p \"require('./package.json').version\")'\" --external @libsql/client --external drizzle-orm --external commander --external libphonenumber-js --external normalize-url --external toml --external ulid && cp src/fuse-helper.c dist/fuse-helper.c && cp -r src/nfs-server dist/nfs-server",
     "crm": "bun run src/cli.ts",
     "check-types": "tsc --noEmit",
     "test": "bun test --timeout 30000",

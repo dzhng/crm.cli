@@ -8,7 +8,29 @@ import {
   writeFileSync,
 } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+// Directory holding the compiled bundle (or the source file in dev). Works
+// under both Node and Bun, unlike `import.meta.dir` which is Bun-only and
+// resolves to `undefined` under Node.
+const BUNDLE_DIR = dirname(fileURLToPath(import.meta.url))
+
+// Resolve an asset shipped with the package (fuse-helper.c, nfs-server/).
+// In bundle mode the build copies these into `dist/`, so they sit next to
+// cli.js. In source mode (running `bun run src/cli.ts`) BUNDLE_DIR is
+// `src/commands` and the assets live one level up, in `src/`.
+function resolveAsset(name: string): string | null {
+  for (const candidate of [
+    join(BUNDLE_DIR, name),
+    join(BUNDLE_DIR, '..', name),
+  ]) {
+    if (existsSync(candidate)) {
+      return candidate
+    }
+  }
+  return null
+}
 
 import type { Command } from 'commander'
 
@@ -72,9 +94,9 @@ async function mountDarwin(
 
   if (!existsSync(nfsHelperPath)) {
     // Auto-compile the Rust NFS server
-    const nfsSrcDir = join(import.meta.dir, '..', 'nfs-server')
-    if (!existsSync(join(nfsSrcDir, 'Cargo.toml'))) {
-      die(`Error: NFS server source not found at ${nfsSrcDir}`)
+    const nfsSrcDir = resolveAsset('nfs-server')
+    if (!(nfsSrcDir && existsSync(join(nfsSrcDir, 'Cargo.toml')))) {
+      die('Error: NFS server source not found in package.')
     }
     ensureDir(join(homedir(), '.crm', 'bin'))
     const cargoPath =
@@ -244,10 +266,10 @@ async function mountLinux(
   const helperPath = join(homedir(), '.crm', 'bin', 'crm-fuse')
 
   if (!existsSync(helperPath)) {
-    const srcPath = join(import.meta.dir, '..', 'fuse-helper.c')
-    if (!existsSync(srcPath)) {
+    const srcPath = resolveAsset('fuse-helper.c')
+    if (!srcPath) {
       die(
-        'Error: FUSE helper not found. Install FUSE dependencies and rebuild, or use `crm export-fs` instead.',
+        'Error: FUSE helper source not found in package. Reinstall crm.cli or use `crm export-fs` instead.',
       )
     }
     ensureDir(join(homedir(), '.crm', 'bin'))
