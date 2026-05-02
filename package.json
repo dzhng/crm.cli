@@ -1,6 +1,6 @@
 {
   "name": "@dzhng/crm.cli",
-  "version": "0.3.7",
+  "version": "0.3.8",
   "description": "Headless CLI-first CRM",
   "author": "David Zhang",
   "license": "MIT",
