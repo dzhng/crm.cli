@@ -12,6 +12,13 @@ export interface CRMConfig {
   mount: {
     default_path: string
     readonly: boolean
+    /**
+     * Mount with `-o allow_other` so processes running as a different uid
+     * (e.g. root, container orchestrators) can read/write the FUSE filesystem.
+     * Requires `user_allow_other` in /etc/fuse.conf when the mount is invoked
+     * by a non-root user. Linux-only; ignored by the macOS NFS path.
+     */
+    allow_other: boolean
     max_recent_activity: number
     search_limit: number
   }
@@ -44,6 +51,7 @@ function defaultConfig(): CRMConfig {
     mount: {
       default_path: join(homedir(), 'crm'),
       readonly: false,
+      allow_other: false,
       max_recent_activity: 10,
       search_limit: 20,
     },

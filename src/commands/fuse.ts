@@ -259,9 +259,9 @@ async function mountLinux(
   config: {
     database: { path: string }
     pipeline: { stages: string[] }
-    mount: { readonly?: boolean }
+    mount: { readonly?: boolean; allow_other?: boolean }
   },
-  opts: { readonly?: boolean },
+  opts: { readonly?: boolean; allowOther?: boolean },
 ) {
   const helperPath = join(homedir(), '.crm', 'bin', 'crm-fuse')
 
@@ -325,6 +325,12 @@ async function mountLinux(
   const fuseArgs = ['-f', mp, '--', socketPath]
   if (opts.readonly || config.mount.readonly) {
     fuseArgs.unshift('-o', 'ro')
+  }
+  if (opts.allowOther || config.mount.allow_other) {
+    // `user_allow_other` must be enabled in /etc/fuse.conf for this to work
+    // when the mount is invoked by a non-root user. The mount call will fail
+    // loudly if it isn't.
+    fuseArgs.unshift('-o', 'allow_other')
   }
 
   const fuseProc = spawn(helperPath, fuseArgs, {
@@ -437,6 +443,10 @@ export function registerFuseCommands(program: Command) {
     .description('Mount CRM as virtual filesystem')
     .argument('[mountpoint]', 'Mount point directory')
     .option('--readonly', 'Mount read-only')
+    .option(
+      '--allow-other',
+      'Allow processes running as a different uid (e.g. root) to access the mount. Linux-only; requires user_allow_other in /etc/fuse.conf when invoked by a non-root user.',
+    )
     .action(async (mountpoint, opts) => {
       const { config } = await getCtx()
       const mp = mountpoint || config.mount.default_path
